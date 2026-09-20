@@ -1,0 +1,10 @@
+{
+  "type": "code",
+  "modid": "embersmokedriver",
+  "name": "Ember isolated smoke driver",
+  "version": "1.0.0",
+  "side": "Client",
+  "requiredOnClient": false,
+  "requiredOnServer": false,
+  "dependencies": { "game": "1.22.7", "emberdiagnostics": "1.0.0" }
+}

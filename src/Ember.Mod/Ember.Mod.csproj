@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><AssemblyName>Ember</AssemblyName></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Ember.Core/Ember.Core.csproj" />
+    <Reference Include="VintagestoryAPI"><HintPath>$(VintageStoryPath)/VintagestoryAPI.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="VintagestoryLib"><HintPath>$(VintageStoryPath)/VintagestoryLib.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="0Harmony"><HintPath>$(VintageStoryPath)/Lib/0Harmony.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Newtonsoft.Json"><HintPath>$(VintageStoryPath)/Lib/Newtonsoft.Json.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="OpenTK.Graphics"><HintPath>$(VintageStoryPath)/Lib/OpenTK.Graphics.dll</HintPath><Private>false</Private></Reference>
+    <None Include="modinfo.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include=".ignore" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <Target Name="CheckGame" BeforeTargets="ResolveReferences" Condition="!Exists('$(VintageStoryPath)/VintagestoryAPI.dll')">
+    <Error Text="Set VintageStoryPath or VINTAGE_STORY to a Vintage Story 1.22.7 installation." />
+  </Target>
+</Project>

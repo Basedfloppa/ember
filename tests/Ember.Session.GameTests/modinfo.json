@@ -1,0 +1,10 @@
+{
+  "type": "code",
+  "modid": "embersessiontestdriver",
+  "name": "Ember isolated session game test driver",
+  "version": "1.1.0",
+  "side": "Client",
+  "requiredOnClient": false,
+  "requiredOnServer": false,
+  "dependencies": { "game": "1.22.7", "emberdiagnostics": "1.1.0" }
+}

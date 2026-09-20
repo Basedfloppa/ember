@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Ember.Core/Ember.Core.csproj" />
+    <ProjectReference Include="../../src/Ember.Trace/Ember.Trace.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+</Project>

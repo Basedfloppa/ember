@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security and private reporting
+    url: https://github.com/bbauti/ember/blob/main/SECURITY.md
+    about: Read the private-reporting procedure before sharing a vulnerability.
+  - name: Usage and troubleshooting
+    url: https://github.com/bbauti/ember/blob/main/docs/usage.md
+    about: Commands, runtime setup, configuration and common problems.

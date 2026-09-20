@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core-and-worker:
+    name: Core, sessions and EventPipe worker (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Core collection, redaction and exports
+        run: dotnet run --project tests/Ember.Tests/Ember.Tests.csproj -c Release
+      - name: Session assembly and analysis
+        run: dotnet run --project tests/Ember.Session.Tests/Ember.Session.Tests.csproj -c Release
+      - name: External supervisor and recovery
+        run: dotnet run --project tests/Ember.Trace.Session.Tests/Ember.Trace.Session.Tests.csproj -c Release
+
+  viewer-and-docs:
+    name: Offline viewer and repository checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Documentation links and metadata
+        run: node scripts/check-repository.cjs
+      - name: Chromium viewer regressions
+        run: node viewer/verify.cjs
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+
+# Full mod builds and graphical gameplay tests require proprietary game files.
+# They run locally; no game assemblies or private reports are uploaded by CI.

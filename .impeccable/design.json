@@ -1,0 +1,184 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-19T22:54:13.327Z",
+  "title": "Design System: Ember Diagnostics",
+  "extensions": {
+    "colorMeta": {
+      "bg": { "role": "neutral", "displayName": "Graphite background" },
+      "panel": { "role": "neutral", "displayName": "Graphite panel" },
+      "panel2": { "role": "neutral", "displayName": "Control surface" },
+      "line": { "role": "neutral", "displayName": "Shared boundary" },
+      "text": { "role": "neutral", "displayName": "Primary text" },
+      "muted": { "role": "neutral", "displayName": "Supporting text" },
+      "accent": { "role": "primary", "displayName": "Warm amber" },
+      "cyan": { "role": "secondary", "displayName": "Cyan link, focus and series" },
+      "purple": { "role": "secondary", "displayName": "Purple series" },
+      "red": { "role": "secondary", "displayName": "Red series and coverage gap" },
+      "green": { "role": "secondary", "displayName": "Green series and observed coverage" },
+      "primary-ink": { "role": "neutral", "displayName": "Primary action ink" },
+      "control-hover": { "role": "neutral", "displayName": "Control hover" },
+      "selected": { "role": "primary", "displayName": "Incident selection wash" },
+      "incident-hover": { "role": "neutral", "displayName": "Incident hover wash" },
+      "notice-bg": { "role": "primary", "displayName": "Notice wash" },
+      "notice-line": { "role": "primary", "displayName": "Notice outline" },
+      "notice-text": { "role": "neutral", "displayName": "Notice text" },
+      "flame-root": { "role": "neutral", "displayName": "Aggregate stack root" },
+      "flame-teal": { "role": "secondary", "displayName": "Module teal" },
+      "flame-purple": { "role": "secondary", "displayName": "Module purple" },
+      "flame-green": { "role": "secondary", "displayName": "Module green" },
+      "flame-brown": { "role": "secondary", "displayName": "Module brown" },
+      "flame-blue": { "role": "secondary", "displayName": "Module blue" },
+      "flame-rose": { "role": "secondary", "displayName": "Module rose" }
+    },
+    "typographyMeta": {
+      "headline": { "displayName": "Recording headline", "purpose": "Session recording or Performance snapshot with capture metadata; 18px at viewport widths up to 760px. No separate display-font role is established." },
+      "section-title": { "displayName": "Section title", "purpose": "General report-section headings; the stack canvas has its own compact title role." },
+      "incident-title": { "displayName": "Incident title", "purpose": "Selected incident; the same size on desktop and mobile." },
+      "workbench-title": { "displayName": "Workbench title", "purpose": "Flame, hotspot and call-tree headings inside the stack canvas." },
+      "navigation": { "displayName": "Report tab", "purpose": "Readable horizontal navigation with an underlined selected state." },
+      "brand-word": { "displayName": "Ember wordmark", "purpose": "Compact installed-font product name; the old brand-mark element is removed." },
+      "body": { "displayName": "Body paragraph", "purpose": "Root UI family and size; 1.65 line height applies to ordinary paragraphs, not every control. Root figures are tabular." },
+      "label": { "displayName": "Control and metadata label", "purpose": "Compact fields, table text and small actions; mobile input/select text is 16px." },
+      "evidence": { "displayName": "Evidence copy", "purpose": "Readable supporting evidence and counter-evidence." },
+      "selection-note": { "displayName": "Selection scope", "purpose": "Range, observation density and measurement limitations." },
+      "table-heading": { "displayName": "Investigation table heading", "purpose": "Sentence-case column labels with normal wrapping, overflow-wrap:anywhere and zero tracking." },
+      "method-signature": { "displayName": "Full method signature", "purpose": "Wrapping cyan inspector text; never ellipsized." },
+      "method-action": { "displayName": "Method selection control", "purpose": "Single-line ellipsized hotspot action paired with an explicit selected-method link." },
+      "code": { "displayName": "General code", "purpose": "Active general monospace stack, including the SFMono-Regular fallback; contextual sizes can override the root size." }
+    },
+    "shadows": [
+      { "name": "flat-card", "value": "none", "purpose": "Report cards explicitly remove box shadows; shared borders and surface tones supply depth." }
+    ],
+    "motion": [
+      { "name": "pointer-press", "value": "transform 120ms cubic-bezier(.23,1,.32,1)", "purpose": "Buttons only under prefers-reduced-motion:no-preference, hover:hover and pointer:fine." },
+      { "name": "pressed-scale", "value": "scale(.98)", "purpose": "Enabled button :active under the same fine-pointer/no-reduced-motion conditions." },
+      { "name": "reduced-motion", "value": "transition:none; transform:none", "purpose": "Button transitions and pressed transforms are removed for reduced motion. Selection and section renders are immediate." }
+    ],
+    "breakpoints": [
+      { "name": "legacy-mobile-max", "value": "700px" },
+      { "name": "workbench-mobile-max", "value": "760px" },
+      { "name": "compact-report-max", "value": "1100px" },
+      { "name": "collapsed-workbench-max", "value": "1180px" },
+      { "name": "wide-statistics-min", "value": "1450px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary action",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Base amber action used by the local-file welcome; app-bar and investigation-heading actions have neutral overrides.",
+      "html": "<button class=\"ds-primary\" type=\"button\">Choose a report.json</button>",
+      "css": ".ds-primary{font:700 14px 'Segoe UI',system-ui,-apple-system,BlinkMacSystemFont,sans-serif;font-variant-numeric:tabular-nums;color:#251708;background:var(--accent,#ffab70);border:1px solid var(--accent,#ffab70);border-radius:8px;padding:9px 12px;cursor:pointer}.ds-primary:hover{background:var(--accent,#ffab70);border-color:var(--accent,#ffab70)}.ds-primary:focus-visible{outline:3px solid var(--cyan,#6ddbd4);outline-offset:3px}.ds-primary:disabled{opacity:.4;cursor:default}@media(prefers-reduced-motion:no-preference) and (hover:hover) and (pointer:fine){.ds-primary{transition:transform 120ms cubic-bezier(.23,1,.32,1)}.ds-primary:active:not(:disabled){transform:scale(.98)}}@media(max-width:760px){.ds-primary{min-height:36px}}@media(prefers-reduced-motion:reduce){.ds-primary{transition:none}.ds-primary:active{transform:none}}"
+    },
+    {
+      "name": "App-bar action",
+      "kind": "button",
+      "refersTo": "button-app-bar",
+      "description": "Compact neutral file action; secondary hover retains its amber edge. Open report uses the same neutral resting surface.",
+      "html": "<button class=\"ds-secondary\" type=\"button\">Compare baseline</button>",
+      "css": ".ds-secondary{font:500 12px 'Segoe UI',system-ui,-apple-system,BlinkMacSystemFont,sans-serif;font-variant-numeric:tabular-nums;color:var(--text,#edf0f6);background:var(--panel2,#1c222c);border:1px solid var(--line,#2b3443);border-radius:4px;padding:6px 10px;cursor:pointer}.ds-secondary:hover{background:#2a2b30;border-color:var(--accent,#ffab70)}.ds-secondary:focus-visible{outline:3px solid var(--cyan,#6ddbd4);outline-offset:3px}.ds-secondary:disabled{opacity:.4;cursor:default}@media(prefers-reduced-motion:no-preference) and (hover:hover) and (pointer:fine){.ds-secondary{transition:transform 120ms cubic-bezier(.23,1,.32,1)}.ds-secondary:active:not(:disabled){transform:scale(.98)}}@media(max-width:760px){.ds-secondary{min-height:38px;white-space:normal}}@media(prefers-reduced-motion:reduce){.ds-secondary{transition:none}.ds-secondary:active{transform:none}}"
+    },
+    {
+      "name": "Small ghost action",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Inspector copy action with a retained control boundary and the workbench's 4px radius override.",
+      "html": "<button class=\"ds-ghost\" type=\"button\">Copy signature</button>",
+      "css": ".ds-ghost{font:12px 'Segoe UI',system-ui,-apple-system,BlinkMacSystemFont,sans-serif;color:var(--text,#edf0f6);background:transparent;border:1px solid var(--line,#2b3443);border-radius:4px;padding:5px 9px;cursor:pointer}.ds-ghost:hover{border-color:var(--accent,#ffab70);background:transparent}.ds-ghost:focus-visible{outline:3px solid var(--cyan,#6ddbd4);outline-offset:3px}.ds-ghost:disabled{opacity:.4;cursor:default}@media(prefers-reduced-motion:no-preference) and (hover:hover) and (pointer:fine){.ds-ghost{transition:transform 120ms cubic-bezier(.23,1,.32,1)}.ds-ghost:active:not(:disabled){transform:scale(.98)}}@media(max-width:760px){.ds-ghost{min-height:36px}}@media(prefers-reduced-motion:reduce){.ds-ghost{transition:none}.ds-ghost:active{transform:none}}"
+    },
+    {
+      "name": "Method search",
+      "kind": "input",
+      "refersTo": "search",
+      "description": "Local stack filter; retains full stacks containing a matching frame.",
+      "html": "<input class=\"ds-search\" type=\"search\" aria-label=\"Search stack frames\" placeholder=\"Search method, module, or mod…\">",
+      "css": ".ds-search{font:12px 'Segoe UI',system-ui,-apple-system,BlinkMacSystemFont,sans-serif;color:var(--text,#edf0f6);background:var(--bg,#0e1117);border:1px solid var(--line,#2b3443);border-radius:4px;padding:6px 8px;min-width:170px;max-width:none;flex:1;caret-color:var(--accent,#ffab70)}.ds-search::placeholder{color:var(--muted,#abb7c8)}.ds-search:focus-visible{outline:3px solid var(--cyan,#6ddbd4);outline-offset:3px}@media(max-width:760px){.ds-search{font-size:16px;width:100%;flex-basis:100%}}"
+    },
+    {
+      "name": "Horizontal report navigation",
+      "kind": "nav",
+      "refersTo": "nav-tab",
+      "description": "Scrollable report tabs; selected state is explicit. Production adds roving tabindex and arrow/Home/End handling.",
+      "html": "<nav class=\"ds-nav\" role=\"tablist\" aria-label=\"Report sections\" aria-orientation=\"horizontal\"><button class=\"ds-tab\" type=\"button\" role=\"tab\" aria-selected=\"true\">Investigate</button><button class=\"ds-tab\" type=\"button\" role=\"tab\" aria-selected=\"false\" tabindex=\"-1\">Overview</button><button class=\"ds-tab\" type=\"button\" role=\"tab\" aria-selected=\"false\" tabindex=\"-1\">Frames &amp; runtime</button></nav>",
+      "css": ".ds-nav{display:flex;flex-direction:row;overflow:auto;gap:12px;background:var(--bg,#0e1117)}.ds-tab{font:13px 'Segoe UI',system-ui,-apple-system,BlinkMacSystemFont,sans-serif;text-align:left;white-space:nowrap;border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;color:var(--muted,#abb7c8);padding:9px 3px;display:flex;align-items:center;gap:11px;cursor:pointer}.ds-tab:hover{background:transparent;border-color:transparent}.ds-tab[aria-selected=true]{color:var(--text,#edf0f6);background:transparent;border-color:var(--accent,#ffab70)}.ds-tab:focus-visible{outline:3px solid var(--cyan,#6ddbd4);outline-offset:3px}@media(prefers-reduced-motion:no-preference) and (hover:hover) and (pointer:fine){.ds-tab{transition:transform 120ms cubic-bezier(.23,1,.32,1)}.ds-tab:active:not(:disabled){transform:scale(.98)}}@media(max-width:760px){.ds-nav{gap:14px}.ds-tab{padding:8px 2px;min-height:36px}}@media(prefers-reduced-motion:reduce){.ds-tab{transition:none}.ds-tab:active{transform:none}}"
+    },
+    {
+      "name": "Context badge",
+      "kind": "chip",
+      "refersTo": "badge",
+      "description": "Noninteractive scope or confidence label.",
+      "html": "<span class=\"ds-badge\">Context</span>",
+      "css": ".ds-badge{font:11px 'Segoe UI',system-ui,-apple-system,BlinkMacSystemFont,sans-serif;border:1px solid var(--line,#2b3443);padding:4px 8px;border-radius:6px;white-space:nowrap;color:var(--muted,#abb7c8);background:var(--panel2,#1c222c)}"
+    },
+    {
+      "name": "Report card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Standard report container; workbench inner sections remove this outer shell.",
+      "html": "<section class=\"ds-card\"><h2 class=\"ds-card-title\">Capture scope</h2></section>",
+      "css": ".ds-card{font:14px 'Segoe UI',system-ui,-apple-system,BlinkMacSystemFont,sans-serif;font-variant-numeric:tabular-nums;color:var(--text,#edf0f6);background:var(--panel,#151a22);border:1px solid var(--line,#2b3443);border-radius:var(--radius,12px);padding:20px;min-width:0;box-shadow:none}.ds-card-title{margin:0;font-size:17px;font-weight:600;letter-spacing:-.015em}@media(max-width:700px){.ds-card{padding:16px}}"
+    },
+    {
+      "name": "Selected incident",
+      "kind": "button",
+      "refersTo": "incident",
+      "description": "Flat elapsed-time and peak row with slow-frame count; confidence and exact profile-origin seconds remain in the tooltip.",
+      "html": "<button class=\"ds-incident\" type=\"button\" aria-pressed=\"true\" title=\"62.641 seconds from profile start; medium confidence\"><span class=\"ds-incident-time\">01:02.641</span><strong class=\"ds-incident-peak\">903 ms</strong><span class=\"ds-incident-caption\">1 slow frame</span></button>",
+      "css": ".ds-incident{font:14px/1.45 'Segoe UI',system-ui,-apple-system,BlinkMacSystemFont,sans-serif;font-variant-numeric:tabular-nums;color:var(--text,#edf0f6);display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 8px;width:100%;border:0;background:transparent;border-radius:3px;padding:9px 8px;text-align:left;white-space:normal;cursor:pointer}.ds-incident[aria-pressed=true]{background:#ffab7012}.ds-incident-time{font:12px ui-monospace,Consolas,monospace}.ds-incident-peak{font-size:12px;font-weight:500;color:var(--text,#edf0f6)}.ds-incident[aria-pressed=true] .ds-incident-peak{color:var(--accent,#ffab70)}.ds-incident-caption{font-size:12px;color:var(--muted,#abb7c8);grid-column:1/-1}.ds-incident:focus-visible{outline:3px solid var(--cyan,#6ddbd4);outline-offset:3px}@media(hover:hover) and (pointer:fine){.ds-incident:not([aria-pressed=true]):hover{background:#ffffff08}}@media(prefers-reduced-motion:no-preference) and (hover:hover) and (pointer:fine){.ds-incident{transition:transform 120ms cubic-bezier(.23,1,.32,1)}.ds-incident:active:not(:disabled){transform:scale(.98)}}@media(max-width:760px){.ds-incident{flex:0 0 150px;padding:9px;min-height:36px}}@media(prefers-reduced-motion:reduce){.ds-incident{transition:none}.ds-incident:active{transform:none}}"
+    },
+    {
+      "name": "Selected method action",
+      "kind": "custom",
+      "refersTo": "method-action",
+      "description": "Ellipsized table control with its explicit inspector link. Production focuses the full-signature inspector without moving focus on selection itself.",
+      "html": "<div class=\"ds-method-cell\"><button class=\"ds-method\" type=\"button\" aria-pressed=\"true\" title=\"System.Threading.Thread.Sleep(Int32)\">System.Threading.Thread.Sleep(Int32)</button><div class=\"ds-method-module\">System.Private.CoreLib.il</div><a class=\"ds-method-jump\" href=\"#ds-selected-method\">View selected method</a></div><section class=\"ds-method-inspector\" id=\"ds-selected-method\" tabindex=\"-1\"><h3 class=\"ds-method-heading\">Selected method</h3><code class=\"ds-signature\">System.Threading.Thread.Sleep(Int32)</code></section>",
+      "css": ".ds-method-cell{font:12px/1.6 'Segoe UI',system-ui,-apple-system,BlinkMacSystemFont,sans-serif;color:var(--text,#edf0f6)}.ds-method{border:0;background:transparent;border-radius:3px;text-align:left;padding:3px 0;font:12px/1.5 ui-monospace,Consolas,monospace;overflow-wrap:anywhere;max-width:100%;color:var(--text,#edf0f6);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%;cursor:pointer}.ds-method[aria-pressed=true]{color:var(--accent,#ffab70)}.ds-method:hover{background:transparent}.ds-method-module{color:var(--muted,#abb7c8);font-size:12px;overflow-wrap:anywhere}.ds-method-jump{color:var(--cyan,#6ddbd4);text-underline-offset:4px;font-size:12px;display:inline-block;margin-top:5px}.ds-method-inspector{scroll-margin-top:24px;color:var(--text,#edf0f6)}.ds-method-heading{font:650 13px 'Segoe UI',system-ui,-apple-system,BlinkMacSystemFont,sans-serif;margin:0 0 10px}.ds-signature{font:12px/1.7 ui-monospace,Consolas,monospace;overflow-wrap:anywhere;color:var(--cyan,#6ddbd4);display:block;margin:10px 0}.ds-method:focus-visible,.ds-method-jump:focus-visible,.ds-method-inspector:focus-visible{outline:3px solid var(--cyan,#6ddbd4);outline-offset:3px}@media(hover:hover) and (pointer:fine){.ds-method:hover{color:var(--accent,#ffab70)}}@media(prefers-reduced-motion:no-preference) and (hover:hover) and (pointer:fine){.ds-method{transition:transform 120ms cubic-bezier(.23,1,.32,1)}.ds-method:active:not(:disabled){transform:scale(.98)}}@media(max-width:760px){.ds-method{min-height:36px}}@media(prefers-reduced-motion:reduce){.ds-method{transition:none}.ds-method:active{transform:none}}"
+    },
+    {
+      "name": "Flame canvas",
+      "kind": "custom",
+      "refersTo": "flame-container",
+      "description": "Workbench root-frame specimen at a 1000-unit container width; production derives viewBox width from the container (minimum 650 units), child geometry from observations, and supplies zoom/keyboard handlers. Frame radius remains 2 SVG units; the local container uses 3px corners.",
+      "html": "<div class=\"ds-flame-scroll\"><svg class=\"ds-flame\" xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 1000 23\" role=\"group\" aria-label=\"Sampled stack flamegraph\"><g class=\"ds-flame-frame\" role=\"button\" tabindex=\"0\" aria-label=\"All matching stack observations\"><rect x=\"0\" y=\"0\" width=\"1000\" height=\"22\" rx=\"2\" fill=\"#242c37\"/><text x=\"5\" y=\"15\">All matching stack observations</text></g></svg></div>",
+      "css": ".ds-flame-scroll{overflow:auto;margin-top:8px;border:1px solid var(--line,#2b3443);border-radius:3px;padding:6px;background:var(--bg,#0e1117)}.ds-flame{min-width:540px;min-height:60px;width:100%;display:block}.ds-flame rect{stroke:var(--panel,#151a22);stroke-width:1}.ds-flame text{fill:var(--text,#edf0f6);font:11px ui-monospace,Consolas,monospace;pointer-events:none}.ds-flame-frame{cursor:pointer}.ds-flame-frame:focus rect{stroke:var(--text,#edf0f6);stroke-width:3}.ds-flame-frame:focus-visible{outline:none}.ds-flame-frame:focus-visible rect{stroke:var(--cyan,#6ddbd4);stroke-width:3}@media(hover:hover) and (pointer:fine){.ds-flame-frame:hover rect{stroke:var(--text,#edf0f6);stroke-width:1}}@media(max-width:760px){.ds-flame{min-width:650px}}"
+    },
+    {
+      "name": "Sampling details",
+      "kind": "custom",
+      "description": "Progressive disclosure beside the matching-observation count. Production lazily inserts source counts, density and the recorded profile-start date; scope and interpretation remain accessible here.",
+      "html": "<details class=\"ds-sample-details\"><summary class=\"ds-sample-summary\">Sampling details</summary><div class=\"ds-sample-body\"><p class=\"ds-sample-copy\">Density includes all threads and coverage gaps; not CPU utilization. Search retains complete stacks containing a matching frame. Self = leaf frame; inclusive = any position, counted once per observation.</p><p class=\"ds-sample-copy\">Ranges use seconds from the profile start. Start inclusive, end exclusive. Dedicated incident samples and the global reservoir have different retention densities.</p><p class=\"ds-sample-copy\">Timeline: maximum frame interval per runtime window. Red shading marks stack-coverage gaps. Flame graph: root to leaf; width represents inclusive observations, color groups modules. Zoom limits the displayed branch; export uses the time, thread, managed and search filters.</p></div></details>",
+      "css": ".ds-sample-details{font:12px 'Segoe UI',system-ui,-apple-system,BlinkMacSystemFont,sans-serif;color:var(--muted,#abb7c8);border:0;background:transparent;margin:0;padding:0;border-radius:0;max-width:74ch}.ds-sample-summary{font-size:12px;font-weight:400;padding:0;cursor:pointer;color:var(--text,#edf0f6);background:#ffffff02;overflow-wrap:anywhere}.ds-sample-details[open]{flex-basis:100%}.ds-sample-body{padding:8px 0 2px;font-size:12px;line-height:1.6}.ds-sample-copy{margin:0;line-height:1.65}.ds-sample-copy+.ds-sample-copy{margin-top:7px}.ds-sample-summary:focus-visible{outline:3px solid var(--cyan,#6ddbd4);outline-offset:3px}@media(max-width:760px){.ds-sample-details{max-width:100%}}"
+    }
+  ],
+  "narrative": {
+    "northStar": "una mezcla de expediente y laboratorio",
+    "overview": "The user's confirmed mixture of Expediente and Laboratorio inherits Ember's dark graphite, warm amber selection and restrained data colors. This is a dense, quiet technical workspace for investigating deeply. Preserve the product name and “Evidence before assumptions.” English application copy accompanies measurements, coverage and uncertainty; signatures and observations remain inspectable.\n\nThe shipped interface pairs an incident queue with a stack laboratory, under a compact app bar and horizontal report navigation. Recording metadata supplies the heading context; elapsed incident rows, underlined tabs and flat, shared pane boundaries organize the investigation. Direct selection and progressive disclosure keep detailed evidence close to the data. Its materials are local HTML, CSS and SVG, with installed UI fonts and monospace signatures. The app bar identifies Ember with a wordmark; no brand-mark element or visual assets ship. Review screenshots are verification evidence only.",
+    "keyCharacteristics": [
+      "Dark graphite surfaces with warm amber selection and restrained diagnostic colors.",
+      "Compact UI typography, tabular figures and complete monospace signatures.",
+      "Shared pane boundaries, flame-first investigation and explicit evidence access.",
+      "Immediate selection, retained keyboard focus and deliberate narrow-screen reading order.",
+      "Self-contained offline rendering without external fonts or visual dependencies."
+    ],
+    "rules": [
+      { "name": "The Selection Has Context Rule", "body": "Use the selection treatment belonging to the component, and retain its text label and semantic selected/pressed state. Data colors require a legend or explanatory text.", "section": "colors" },
+      { "name": "The Complete Signature Rule", "body": "Table truncation must retain the full signature in the inspector and expose the selected row's “View selected method” link. Do not truncate the inspection destination.", "section": "typography" },
+      { "name": "The Shared Boundaries Rule", "body": "Use shared pane edges and top rules to separate adjacent investigation roles. Keep the workspace unboxed; local control and flame-canvas borders provide the remaining boundaries.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do preserve graphite surfaces, amber contextual selection and labeled diagnostic colors.",
+      "Do keep units, sampled-observation scope, uncertainty and evidence access beside the data.",
+      "Do retain complete signatures, explicit inspection links and keyboard focus through selection and pagination.",
+      "Do preserve flame → method/evidence → results when the workbench collapses, with local chart/table overflow.",
+      "Do keep rendering local and self-contained with installed fonts, CSS and SVG."
+    ],
+    "donts": [
+      "Don't turn module colors, sampled hotspots or ownership hints into unsupported causal or severity claims.",
+      "Don't reuse superseded root colors, the old vertical report navigation or discarded prototype-picker chrome.",
+      "Don't add decorative gradients, entrance choreography or nested card shells to the flat investigation workspace.",
+      "Don't propagate legacy eyebrow styling, system-face display treatment or text-glyph action icons as new component conventions.",
+      "Don't treat review screenshots as shipping visual assets or invent a tonal scale absent from the source."
+    ]
+  }
+}

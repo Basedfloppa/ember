@@ -1,0 +1,23 @@
+name: Feature or investigation improvement
+description: Describe a diagnostic problem or workflow Ember could improve.
+title: '[Feature] '
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to investigate?
+      description: Describe the player or reviewer problem and the current workaround.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: Explain how it would help and what evidence it would expose.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and tradeoffs
+      description: Optional platform needs, collection overhead, privacy or measurement limits.

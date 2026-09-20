@@ -1,0 +1,60 @@
+name: Bug report
+description: Report a reproducible capture, export or viewer problem.
+title: '[Bug] '
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Ember. Please check existing issues first.
+        **Do not attach an unreviewed recording, credentials, server address or private logs.**
+        Security vulnerabilities follow [SECURITY.md](https://github.com/bbauti/ember/blob/main/SECURITY.md).
+  - type: input
+    id: ember-version
+    attributes:
+      label: Ember version or commit
+      placeholder: '1.1.2, or a commit hash for a source build'
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Game version, OS/architecture, .NET runtime; browser/version if relevant.
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Where does it happen?
+      options:
+        - Singleplayer
+        - Multiplayer client
+        - Offline viewer
+        - Build or test harness
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Include commands, stop/leave/exit behavior and whether it reproduces with only Ember installed.
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Expected and actual result
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Minimal evidence
+      description: Optional sanitized error text, screenshot, minimal synthetic fixture or relevant mod versions. State any gaps or truncation in a report.
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Sharing
+      options:
+        - label: I reviewed any included text or attachments for private information.
+          required: true

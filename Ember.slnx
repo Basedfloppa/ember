@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Ember.Core/Ember.Core.csproj" />
+    <Project Path="src/Ember.Mod/Ember.Mod.csproj" />
+    <Project Path="src/Ember.Trace/Ember.Trace.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Ember.Tests/Ember.Tests.csproj" />
+    <Project Path="tests/Ember.Session.Tests/Ember.Session.Tests.csproj" />
+    <Project Path="tests/Ember.Trace.Session.Tests/Ember.Trace.Session.Tests.csproj" />
+  </Folder>
+</Solution>
