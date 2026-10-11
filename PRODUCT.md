@@ -39,7 +39,8 @@ Ember combines Vintage Story client frame/render measurements, runtime history, 
 - Client-only operation: multiplayer use requires no server installation, server permission, or Ember network packets.
 - Reports remain local and self-contained, work offline, and require no hosting, external viewer dependencies, or automatic uploads.
 - Preserve metric sources, units, capture scope, omissions, coverage gaps, and evidence limitations in analysis and presentation.
-- A sampled hotspot, mod inventory entry, assembly match, or patch owner is supporting evidence, not proof of the cause of a stall.
+- A sampled hotspot, mod inventory entry, assembly match, or patch owner is supporting evidence, not proof of the cause of a stall. The same applies to retained memory: a heap dump attributes bytes to the owner that holds them, not to the mod that caused growth.
+- A heap dump is captured only on an explicit in-session request, never automatically. It keeps per-owner aggregates rather than the object graph, and the raw trace is deleted as soon as it has been reduced.
 - Stack sample percentages describe thread observations, not exact CPU utilization. Render/stage measurements are wall times. Optional GPU elapsed timestamps are not GPU busy time or utilization.
 - Remote-server internals are not observed. In singleplayer, the integrated server shares the client process and can contribute to process metrics and stack samples.
 
@@ -47,7 +48,7 @@ Ember combines Vintage Story client frame/render measurements, runtime history, 
 
 - The collector and separate EventPipe recording worker use C#/.NET 10; the documented game target is Vintage Story 1.22.7. See `README.md` for current installation/build prerequisites.
 - `viewer/report.html` contains the HTML/CSS/JavaScript viewer and is embedded in `Ember.Core.dll` by `src/Ember.Core/Ember.Core.csproj`.
-- The viewer provides incident investigation, frame/runtime charts, session coverage, baseline comparison, mod inventory, render stages, world census, settings/patches, logs/events, and stack-profile exploration.
+- The viewer provides incident investigation, frame/runtime charts, session coverage, memory and heap dumps, baseline comparison, mod inventory, render stages, world census, settings/patches, logs/events, and stack-profile exploration.
 - The default Investigate workspace combines an incident queue with a stack laboratory: shared time/thread/search filters, flame zoom, method inspection, evidence and counter-evidence. It initially selects the incident with the largest recorded frame peak and its context. Scoped selection JSON exports preserve the profile time origin and filter/source semantics.
 - Recording metadata leads the investigation header. A compact selected-range/source strip accompanies the filters, while Sampling details exposes time boundaries, retention density, graph interpretation and export scope on demand.
 - Exports include offline HTML, structured JSON, Markdown summaries, CSV evidence, a manifest, and a speedscope profile when captured. The full file inventory is maintained in `README.md`.

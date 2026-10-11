@@ -96,8 +96,68 @@ public static class SessionAssembler
         if (info.DroppedBatches > 0) notes.Add($"Journal reports {info.DroppedBatches} missing/dropped batches; gaps were not interpolated.");
         info.Notes.AddRange(notes);
         report.Profile = ProfileMerge.Merge(directory, info, Math.Clamp(request.MaxReportSamples, 0, 200000), report.Incidents);
+        report.HeapDumps = HeapDumps(directory, notes);
+        // What the dumps cost the client and what changed between them, both measured from evidence
+        // the recording already holds - the frame journal and the aggregates - rather than from the
+        // walk's own timing, which is a report about itself. This runs before the incidents are
+        // analysed so that the hitch a walk caused can be named in the incident that contains it
+        // instead of being left to the stacks as an unexplained stall.
+        HeapDumpImpact.Measure(report);
+        // Mark each dump in the event timeline: the capture can hitch the game, and the interval
+        // must be readable as a dump rather than mistaken for a game or mod problem. A dump holds new
+        // stack capture back, so the start of the hold and the release are events too: they are what
+        // explains why no new segment covers exactly that point.
+        if (report.HeapDumps.Count > 0)
+        {
+            var marks = new List<DiagnosticEvent>();
+            foreach (HeapDump d in report.HeapDumps)
+            {
+                if (d.CapturedUtc is not null)
+                    marks.Add(new DiagnosticEvent(d.CapturedUtc.Value.ToUnixTimeMilliseconds(), "heapdump",
+                        $"Heap dump {d.Index}: {d.Status}; {d.TotalBytes:N0} bytes in {d.NodeCount:N0} objects{(d.Complete ? "" : "; incomplete, sizes are lower bounds")}"));
+                // A dump that produced no heap has no capture time, and leaving it out of the timeline
+                // would show a request and then nothing: the interval it spent - and the hold it put on
+                // new stack capture - would read as a game or mod problem instead of as this dump.
+                else if ((d.CompletedUtc ?? (d.RequestedUtc == default ? null : d.RequestedUtc)) is { } settled)
+                    marks.Add(new DiagnosticEvent(settled.ToUnixTimeMilliseconds(), "heapdump",
+                        $"Heap dump {d.Index}: {d.Status}; no analysis was produced, {HeapDumpReport.Failure(d).Cause}."));
+                if (d.PausedFromUtc is not null)
+                    marks.Add(new DiagnosticEvent(d.PausedFromUtc.Value.ToUnixTimeMilliseconds(), "heapdump",
+                        $"Heap dump {d.Index}: new stack capture held back so the walk describes a single moment."));
+                if (d.PausedFromUtc is not null && d.ResumedUtc is not null)
+                    marks.Add(new DiagnosticEvent(d.ResumedUtc.Value.ToUnixTimeMilliseconds(), "heapdump",
+                        $"Heap dump {d.Index}: stack capture released after {d.PauseMilliseconds / 1000:F1} s."));
+            }
+            report.Events = report.Events.Concat(marks).OrderBy(e => e.UnixMs).ToArray();
+        }
         IncidentAnalysis.Analyze(report);
         report.Findings = Analysis.Findings(report);
         return report;
+    }
+
+    // A dump work directory holds one aggregate. A dump that never finished is reported as such
+    // rather than omitted: an absent section would be indistinguishable from "was not requested".
+    private static List<HeapDump> HeapDumps(string directory, List<string> notes)
+    {
+        var dumps = new List<HeapDump>();
+        string root = Path.Combine(directory, "heapdumps");
+        if (!Directory.Exists(root)) return dumps;
+        foreach (string work in Directory.EnumerateDirectories(root).Order())
+        {
+            try
+            {
+                var dump = SessionFiles.Read<HeapDump>(Path.Combine(work, "heapdump.json"));
+                if (dump is null) continue;
+                if (dump.Status is "requested" or "running")
+                {
+                    dump.Status = "failed";
+                    dump.Error ??= "The dump worker ended before its aggregate was written; no analysis is available for this request.";
+                }
+                dumps.Add(dump);
+            }
+            catch (Exception e) when (e is IOException or InvalidDataException or JsonException or UnauthorizedAccessException)
+            { notes.Add($"Could not read heap dump {Path.GetFileName(work)}: {e.Message}"); }
+        }
+        return dumps.OrderBy(d => d.Index).ToList();
     }
 }

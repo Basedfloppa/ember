@@ -24,7 +24,7 @@ For every code change, include:
 
 These criteria apply equally to AI-generated, AI-assisted, and manually written contributions. Please describe material AI assistance in the pull request, including the tools and their actual role (for example, generating an implementation, editing documentation, or suggesting tests). Do not claim tests, reviews, or audits that did not happen.
 
-Preserve the client-only boundary, bounded collection, explicit missing-data reporting, and local/offline export behavior. Do not infer exact CPU utilization or mod culpability from sampled thread stacks. Useful reviewer entry points are listed in [architecture](docs/architecture.md#review-priorities).
+Preserve the client-only boundary, bounded collection, explicit missing-data reporting, and local/offline export behavior. Do not infer exact CPU utilization or mod culpability from sampled thread stacks. A heap dump is never automatic: it exists only after an explicit in-session request, keeps per-owner aggregates instead of the object graph, and deletes its raw trace once reduced. Retained bytes show which owner holds an object, not which mod caused memory to grow, and a long dump span does not prove the game was stopped. Useful reviewer entry points are listed in [architecture](docs/architecture.md#review-priorities).
 
 ## License
 

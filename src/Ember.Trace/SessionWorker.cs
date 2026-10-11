@@ -16,6 +16,7 @@ internal sealed class SessionWorker
     private int failures;
     private DateTimeOffset retryAt;
     private readonly long budget;
+    private readonly HeapDumpCoordinator dumps;
     private bool assembledCoverage;
 
     private SessionWorker(string directory, SessionRequest request, bool recover)
@@ -34,6 +35,7 @@ internal sealed class SessionWorker
         info.SupervisorProcessId = Environment.ProcessId;
         using var self = Process.GetCurrentProcess();
         info.SupervisorStartedUtc = new DateTimeOffset(self.StartTime.ToUniversalTime());
+        dumps = new HeapDumpCoordinator(directory, request, info, AddNote, Snapshot);
     }
 
     public static async Task<int> Run(string directory, bool recover)
@@ -81,6 +83,9 @@ internal sealed class SessionWorker
             request.MaxDiskMegabytes is < 1 or > 8192 || request.MaxTraceMegabytes is < 1 or > 1024 ||
             request.SegmentSamples is < 1 or > 200000 || request.KeepExports is < 1 or > 100)
             throw new ArgumentException("The session request contains invalid recording limits.");
+        if (request.HeapDumpTimeoutSeconds is < 10 or > 300 || request.HeapDumpBufferMegabytes is < 64 or > 8192 ||
+            request.HeapDumpMaxNodes is < 1_000_000 or > 100_000_000)
+            throw new ArgumentException("The session request contains invalid heap dump limits.");
     }
 
     private async Task<int> Execute(bool recover)
@@ -105,6 +110,9 @@ internal sealed class SessionWorker
             info.StopReason = stopped.Reason;
             info.StoppedUtc = stopped.StoppedUtc;
             info.DroppedBatches = stopped.DroppedBatches;
+            // A dump still in flight is settled before the report is assembled: its aggregate is
+            // read from the same recording directory the assembler is about to walk.
+            await dumps.StopAsync(stopped.Reason);
             if (stopped.Cancelled)
                 return CommitCancellation();
             await RecoverSegments();
@@ -126,6 +134,12 @@ internal sealed class SessionWorker
                 info.RecordedSeconds = assembled.RecordedSeconds;
                 info.StackCoverageSeconds = assembled.StackCoverageSeconds;
                 info.StackCoveragePercent = assembled.StackCoveragePercent;
+                // The gap split belongs with the coverage it splits: the supervisor keeps its own
+                // session object and swaps it into the report after assembly, so a field the
+                // assembler measured and this object does not copy is a field the export loses.
+                info.UncoveredSeconds = assembled.UncoveredSeconds;
+                info.UncoveredDuringHeapDumpHoldsSeconds = assembled.UncoveredDuringHeapDumpHoldsSeconds;
+                info.HeapDumpHoldSeconds = assembled.HeapDumpHoldSeconds;
                 assembledCoverage = true;
                 foreach (string note in assembled.Notes) AddNote(note);
             }
@@ -188,11 +202,19 @@ internal sealed class SessionWorker
             if (stopped is null && !WorkerFiles.ParentAlive(request)) stopped = new SessionStop("game process exited", now);
             if (stopped is null && (now - request.StartedUtc).TotalSeconds >= request.MaxSeconds)
                 stopped = new SessionStop("maximum recording duration reached", now);
-            long disk = WorkerFiles.Size(directory);
+            long disk = SessionDisk();
             // Leave a small reserve for atomic status/metadata writes; raw and parser files count too.
             bool full = disk >= budget - Math.Min(16 * 1024 * 1024, budget / 16);
             if (stopped is null && full) stopped = new SessionStop("session disk budget reached", now);
             if (stopped is not null) PublishStop();
+
+            // Heap dump requests are only ever answered from here: nothing starts a dump on its own.
+            // A dump holds new segments back while its walk is captured - the runtime answers every
+            // attach with a whole walk of the heap, so an attach cycle is what makes one dump carry
+            // the same heap many times over - and leaves the segment that is already capturing alone,
+            // because a session that merely stays attached costs the walk nothing measurable.
+            dumps.Poll(now, failures, stopping: stopped is not null,
+                segmentsBusy: children.Any(c => !c.Captured), holdSegments: HoldSegmentsForDump);
 
             foreach (Child child in children.ToArray())
             {
@@ -216,7 +238,7 @@ internal sealed class SessionWorker
                 if (child.Process.HasExited) await Complete(child);
             }
 
-            if (stopped is null && children.Count < 2 && !children.Any(c => !c.Captured) && failures < 3 && now >= retryAt)
+            if (stopped is null && dumps.SegmentsAllowed && children.Count < 2 && !children.Any(c => !c.Captured) && failures < 3 && now >= retryAt)
             {
                 // Bound potential raw growth. Parsing is also watched against the total directory cap.
                 long available = budget - WorkerFiles.Size(directory) - Math.Min(4 * 1024 * 1024, budget / 8);
@@ -286,6 +308,19 @@ internal sealed class SessionWorker
     }
 
     private sealed record JournalClosed(DateTimeOffset ClosedUtc, long DroppedBatches, long BytesWritten, string? Error);
+
+    // A dump needs the target to itself only in the sense that no new session may attach while its
+    // walk is being captured: the runtime answers every attach with a whole walk broadcast into the
+    // dump's session, and a trace carrying the heap many times over costs the capture and the
+    // reduction. The segment that is already capturing is deliberately left running - a session that
+    // merely stays attached measured 0.09% unattributable against 0.04% with nothing attached - so
+    // its stacks are not thrown away for a walk that does not need it stopped. New segments are held
+    // back by HeapDumpCoordinator.SegmentsAllowed until the walk has been captured.
+    private void HoldSegmentsForDump()
+    {
+        if (children.Any(child => !child.Captured))
+            AddNote("A heap dump held new stack capture back so its walk describes a single moment; the segment that was already capturing kept journaling, so the recording is continuous. The walk itself stops the client once, during the blocking collection the runtime performs it in, and the exported report measures that stop from the recorded frame intervals.");
+    }
 
     private void StartSegment(int maxTraceMb)
     {
@@ -478,12 +513,24 @@ internal sealed class SessionWorker
         AddNote("Stack coverage includes only successfully parsed segment intervals. Attach, rundown, parser backpressure and retry gaps have no stack coverage; journaled metrics/frames may still cover those gaps.");
     }
 
+    // Heap dump traces are deliberately not charged to the recording's disk budget: they are
+    // transient and as large as the heap, so counting them would stop a healthy recording.
+    private long SessionDisk()
+    {
+        long total = WorkerFiles.Size(directory);
+        string dumps = Path.Combine(directory, "heapdumps");
+        if (Directory.Exists(dumps)) total -= WorkerFiles.Size(dumps);
+        return total;
+    }
+
     private static void Cleanup(string directory)
     {
         try
         {
             string segments = Path.Combine(directory, "segments");
             if (Directory.Exists(segments)) Directory.Delete(segments, recursive: true);
+            string heapDumps = Path.Combine(directory, "heapdumps");
+            if (Directory.Exists(heapDumps)) Directory.Delete(heapDumps, recursive: true);
             foreach (string name in new[] { "batches.ndjson", "seed.json", "final.json" }) File.Delete(Path.Combine(directory, name));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

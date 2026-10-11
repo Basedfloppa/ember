@@ -58,6 +58,7 @@ Play normally, then run **`.ember stop` or leave the world/server**. Ember autom
 | `.ember status` | Show recording/finalization status. |
 | `.ember export` | Export a recent monitoring snapshot; an active session keeps recording. |
 | `.ember mark <text>` | Add a timestamped observation to the report timeline. |
+| `.ember heapdump [note]` | Capture one heap dump during a recording: which owners retain managed memory. Manual only, and the walk can hitch the game briefly. |
 | `.ember recover` | Retry unfinished recordings from saved journals/checkpoints. |
 | `.ember folder` | Open the export folder. |
 
@@ -69,6 +70,7 @@ Play normally, then run **`.ember stop` or leave the world/server**. Ember autom
 - Process CPU in both one-core and machine-normalized units, working set/private/managed memory, allocation rate, GC and thread-pool context.
 - CPU/GPU identity, OS/runtime, selected graphics settings, client-visible entity/chunk counts, meshing queues, received-byte counters, reported ping, and recent warnings/errors and timeline markers.
 - Mod identities, versions, dependencies, systems, associated assemblies, optional file hashes, and Harmony patch inventory. Inventory and sampled module matches are evidence for investigation, not proof a mod caused a stall.
+- A heap dump **only** when `.ember heapdump` is requested during a recording. The report keeps per-owner retained bytes, the largest holder roots and types, the bytes no owner could be attributed to, and whether the capture was complete. The raw trace is deleted as soon as it has been reduced, object addresses and field values are never exported, and nothing is captured between dumps. Every request appears in the report and in `SUMMARY.md`, including refusals and failures: a dump that stopped records `failureKind` and names the limit that stopped it — a filled EventPipe buffer, the object budget, or the dump's own time budget, whose capture and reduction allowances the report states — and one whose totals are a lower bound says so. A dump that never produced a heap still marks the event timeline where it ended.
 - Session managed-stack segments (60 seconds and up to 50,000 retained observations per segment by default), with coverage, rundown/parse status and quality metadata. Attachment and segment transitions can leave gaps; continuous stack coverage is not guaranteed. **Sample percentages are thread observations, not exact CPU percentages.**
 
 Optional mod configuration collection is **off by default** (`IncludeModConfigs=false`). If enabled, configurations pass through redaction. Logs and markers can still contain identifying information: review the files before sharing them. See [data and metric semantics](docs/metrics-and-data.md) for interpretation and sharing details.
@@ -151,7 +153,7 @@ The viewer checks need Node.js 22+ and Chrome/Chromium (`CHROME_PATH` can select
 - A historical 1.1.0 Windows/loopback multiplayer run recorded **30 minutes**, **107,384 frames** and **98.97% usable stack interval coverage**. Version 1.1.2 reuses that capture for viewer validation; it did not receive a new gameplay soak.
 - The viewer regression suite includes hostile text, old/new/empty reports, keyboard interactions and a **400,000-sample / 200,000-frame** stress fixture.
 - A representative, controlled overhead benchmark remains outstanding. Sampling and collection consume resources; Ember does not promise zero overhead.
-- Sample shares are thread observations, **not exact CPU time**. GPU elapsed timestamps are **not utilization**. Module ownership and temporal overlap are **not proof of cause**.
+- Sample shares are thread observations, **not exact CPU time**. GPU elapsed timestamps are **not utilization**. Module ownership and temporal overlap are **not proof of cause**. Retained-memory figures come from one heap snapshot and show which owner **holds** an object, not which mod caused memory to grow; a long heap-walk span does not prove the game was stopped. The runtime answers every EventPipe session that attaches while a walk is being captured with a complete walk of the heap, so a dump that spans several attaches carries the same heap several times over; the analysis collapses those copies onto the first walk and reports the walked count alongside, so the totals describe the heap once.
 - Remote-server internals are unavailable. Linux/macOS game workflows and public-server network/authentication conditions remain unvalidated.
 
 See the [full verification record](docs/verification.md). Raw private captures and generated binaries are intentionally excluded from Git.

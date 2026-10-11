@@ -19,6 +19,9 @@ internal static class Program
             return await SessionWorker.Run(args[1], args[0] == "--recover");
         if (args.Length == 2 && args[0] == "--segment-private")
             return await SessionSegment.Run(args[1]);
+        // One isolated process per heap dump: it attaches, reduces the heap and deletes its trace.
+        if (args.Length == 2 && args[0] == "--heapdump-private")
+            return await HeapDumpWorker.Run(args[1]);
         // Conversion is isolated so cancellation/time/resource limits can terminate TraceLog itself.
         if (args.Length == 2 && args[0] == "--parse-private")
         {

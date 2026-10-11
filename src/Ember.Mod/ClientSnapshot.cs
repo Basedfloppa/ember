@@ -89,7 +89,7 @@ internal static class ClientSnapshot
                 "Profile thread IDs are OS thread IDs; managed main/tessellation thread IDs in the environment are a different identifier space.",
                 "Logs retain bounded warning/error/fatal entries since the collector started. Redaction is best-effort; review exports before sharing.",
                 "Monitoring, census, export and profiling have overhead. CollectorMs and census.CollectionMs measure only their respective phases.",
-                "No heap dump, network packet contents, world seed, player coordinates, player names, login credentials or server address are intentionally collected."
+                "No heap dump is collected unless the player runs .ember heapdump during a recording; when it is, only per-owner aggregate sizes are kept and the raw trace is deleted as soon as it has been reduced. Network packet contents, world seed, player coordinates, player names, login credentials and the server address are never collected."
             ]
         };
         report.Environment["singleplayer"] = api.IsSinglePlayer;
@@ -100,7 +100,8 @@ internal static class ClientSnapshot
             ["managedThreadStacks"] = "on-demand EventPipe", ["clientMods"] = true,
             ["remoteServerCpu"] = false, ["remoteServerTps"] = false, ["serverOnlyMods"] = false,
             ["gpuExecutionTime"] = false, ["gpuUtilization"] = false, ["vramUsage"] = false,
-            ["networkPacketContents"] = false, ["retainedObjectHeapDump"] = false
+            ["networkPacketContents"] = false,
+            ["retainedObjectHeapDump"] = "manual only (.ember heapdump during a recording; never automatic)"
         };
         report.Environment["gamePaused"] = api.IsGamePaused;
         report.Environment["frameWidth"] = api.Render.FrameWidth;

@@ -15,7 +15,8 @@ internal sealed class SessionRecording
     private readonly object stopGate = new();
     private Task? stopping;
     private volatile string state = "preparing";
-    private int stopped, finished;
+    private int stopped, finished, dumpPending;
+    private (int Index, string State)? lastDumpStatus;
     public string DirectoryPath { get; }
     public SessionRequest Request { get; }
     public Task<SessionResult> Completion { get; }
@@ -43,6 +44,10 @@ internal sealed class SessionRecording
             MaxTraceMegabytes = Math.Min(config.MaxTraceMegabytes, 128),
             SegmentSamples = config.SessionSegmentSamples, KeepExports = config.KeepExports,
             OpenFolderWhenFinished = config.OpenFolderWhenFinished,
+            HeapDumpTimeoutSeconds = config.HeapDumpTimeoutSeconds,
+            HeapDumpBufferMegabytes = config.HeapDumpBufferMegabytes,
+            HeapDumpMaxNodes = config.HeapDumpMaxNodes,
+            HeapDumpSampledAllocations = config.HeapDumpSampledAllocations,
             ModMap = seed.Mods.SelectMany(m => m.Assemblies.Select(a => (Assembly: a, m.Id)))
                 .GroupBy(x => x.Assembly, StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(g => g.Key, g => g.Select(x => x.Id).Distinct().ToArray())
@@ -75,6 +80,37 @@ internal sealed class SessionRecording
             catch (Exception e) { collector.Mark("inventory-error", e.GetType().Name + ": " + e.Message); }
         });
         Completion = Monitor();
+    }
+
+    /// <summary>
+    /// Ask for one heap dump. Never automatic: without this call the supervisor does nothing, and
+    /// a second request while one is in flight is refused here rather than queued.
+    /// </summary>
+    public bool RequestHeapDump(string reason, out string message)
+    {
+        if (!IsRecording)
+        {
+            message = "No recording is active, so there is nothing to attach a heap dump to. Use .ember start first.";
+            return false;
+        }
+        if (Interlocked.CompareExchange(ref dumpPending, 1, 0) != 0)
+        {
+            message = "A heap dump is already running; wait for it to finish before asking for another.";
+            return false;
+        }
+        try
+        {
+            AtomicFile.WriteJson(Path.Combine(DirectoryPath, "heapdump.request.json"), new HeapDumpRequest { Reason = reason });
+        }
+        catch (Exception e)
+        {
+            Volatile.Write(ref dumpPending, 0);
+            message = "The heap dump request could not be written: " + Redactor.Text(e.Message);
+            return false;
+        }
+        collector.Mark("heapdump", string.IsNullOrWhiteSpace(reason) ? "Heap dump requested" : "Heap dump requested: " + reason);
+        message = "Heap dump requested. The game will freeze for a moment while the managed heap is walked; the result appears in this chat and in the report.";
+        return true;
     }
 
     public bool Stop(string reason, bool cancel = false, DiagnosticReport? final = null)
@@ -172,6 +208,7 @@ internal sealed class SessionRecording
                 if (workerStop is not null && IsRecording) Stop(workerStop.Reason, workerStop.Cancelled);
                 var info = AtomicFile.ReadJson<SessionInfo>(Path.Combine(DirectoryPath, "session.json"));
                 if (info?.Status is "finalizing" or "recovering" && IsRecording) Stop("worker requested finalization");
+                NotifyHeapDump();
             }
             await exit;
             await output;
@@ -199,6 +236,18 @@ internal sealed class SessionRecording
             Interlocked.Exchange(ref finished, 1);
             worker.Dispose();
         }
+    }
+
+    // The supervisor answers each request in heapdump.status.json. Every distinct state is told to
+    // the player once; a request that is never answered stops blocking new ones after its budget.
+    private void NotifyHeapDump()
+    {
+        var status = AtomicFile.ReadJson<HeapDumpStatus>(Path.Combine(DirectoryPath, "heapdump.status.json"));
+        if (status is null) return;
+        if (lastDumpStatus == (status.Index, status.State)) return;
+        lastDumpStatus = (status.Index, status.State);
+        if (status.State is "completed" or "refused" or "failed") Volatile.Write(ref dumpPending, 0);
+        notify(status.Message);
     }
 
     private static void RemoveRollingData(DiagnosticReport report)

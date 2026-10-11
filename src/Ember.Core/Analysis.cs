@@ -38,6 +38,45 @@ public static class Analysis
                 result.Add(new("warning", "No resolved stack samples", $"{p.SamplesWithoutStack} events had no stack.", "Check profiler notes and .NET diagnostic support. The health timeline remains independently useful."));
         }
         else result.Add(new("info", "No stack profile attached", "This bundle contains monitoring data only.", "Use .ember profile 30 while reproducing the problem to add managed stacks, sampled allocation types and contention."));
+        // A dump is requested by hand, so its outcome is a first-class result of the capture and not
+        // a detail: a failed or partial dump that the summary did not mention would read as if the
+        // heap had been measured. The reason is classified in Core so this text and the chat line
+        // cannot disagree.
+        foreach (var dump in r.HeapDumps)
+        {
+            if (dump.Status is "failed" or "refused")
+            {
+                // The next step is chosen by the limit that actually stopped the dump: a filled
+                // EventPipe buffer and a runtime budget that ran out are different problems, and
+                // naming the wrong one sends a reader to raise a limit that cannot help.
+                var (cause, next) = HeapDumpReport.Failure(dump);
+                result.Add(new("warning", $"Heap dump {dump.Index} was not taken",
+                    $"{Redactor.Text(dump.Error ?? "no reason was recorded")} — {cause}.",
+                    next));
+            }
+            else if (dump.Status is "completed" && !dump.Complete)
+                result.Add(new("warning", $"Heap dump {dump.Index} is incomplete",
+                    $"Its {dump.TotalBytes / 1048576.0:F0} MiB total is a lower bound over {dump.NodeCount:N0} objects: {HeapDumpReport.Incompleteness(dump)}.",
+                    "Repeat the dump with a larger HeapDumpBufferMegabytes and no other session attaching, then compare the two aggregates."));
+        }
+        // What a dump cost is a first-class result of asking for one: the runtime performs the walk
+        // during a blocking collection, so the client stops, and a report that measured the heap but
+        // not the hitch would describe the artifact and not the price.
+        foreach (var dump in r.HeapDumps)
+        {
+            if (dump.Status != "completed" || dump.FreezeStartUtc is null || dump.FreezeMilliseconds <= 0) continue;
+            var incident = r.Incidents.FirstOrDefault(i => i.HeapDumpIndex == dump.Index);
+            // The freeze is on every dump, but only a hitch is a finding: a walk that cost one ordinary
+            // frame is measured and shown without being raised as something to act on.
+            double floor = r.SlowTickThresholdMs > 0 ? r.SlowTickThresholdMs : 50;
+            if (incident is null && dump.FreezeMilliseconds < floor) continue;
+            result.Add(new("info", $"Heap dump {dump.Index} stopped the client for {dump.FreezeMilliseconds / 1000:F2} s",
+                $"The walk is performed during a blocking collection: the longest completed frame interval that began within {HeapDumpImpact.AttachWindowMilliseconds / 1000} s of the request lasted {dump.FreezeMilliseconds:F0} ms, and {dump.FreezeGcPauseMilliseconds:F0} ms of runtime GC pause is recorded in the same windows. " +
+                (incident is null
+                    ? "No incident covers it, so it stayed below the incident threshold."
+                    : $"It is {incident.Id} in the incident list, where it is named as the dump rather than left to the stacks."),
+                "Take dumps in a quiet moment if the hitch matters more than the snapshot; the freeze is the walk itself, and the hold on new stack capture around it is not a second cost."));
+        }
         result.Add(new("info", "Remote server internals are unobserved", "This is a client-only capture, including when connected to a public server.", "Do not infer remote CPU/TPS or server-only mod costs from FPS, ping, or client stacks. Ask the server operator for a separate server capture if needed."));
         if (r.Session is { } session)
             result.Add(new("info", "Continuous session coverage", $"Session {session.RecordedSeconds:F1}s; trace interval union {session.StackCoverageSeconds:F1}s ({session.StackCoveragePercent:F1}%); frames observed/omitted={session.FramesObserved}/{session.FramesOmitted}; journal invalid lines={session.IncompleteJournalLines}, dropped batches={session.DroppedBatches}.", "Read session.notes and incidents for gaps, retention and before/during/after evidence. Stack coverage measures trace interval overlap, not event completeness."));
@@ -60,7 +99,35 @@ public static class Analysis
             b.AppendLine($"- Peak process CPU: {r.Timeline.Max(t => t.Runtime.CpuOneCorePercent):F1}% of one logical CPU\n- Peak working set: {r.Timeline.Max(t => t.Runtime.WorkingSetBytes) / 1048576.0:F1} MiB\n- Peak allocation rate: {r.Timeline.Max(t => t.Runtime.AllocationBytesPerSecond) / 1048576:F1} MiB/s\n- Total GC pause: {r.Timeline.Sum(t => t.Runtime.GcPauseMilliseconds):F1} ms\n");
         }
         if (r.Session is { } session)
-            b.AppendLine($"## Continuous recording\n\n- Session: {session.StartedUtc:O} to {session.StoppedUtc:O}, {session.RecordedSeconds:F1}s; status {session.Status}, stop reason {session.StopReason}\n- Stack interval coverage: {session.StackCoverageSeconds:F1}s ({session.StackCoveragePercent:F1}%), with gaps explicitly unobserved\n- Frames observed {session.FramesObserved:N0}, retained {r.Ticks.Length:N0}, omitted {session.FramesOmitted:N0}. {(session.FramesOmitted > 0 ? "Frame distributions above are estimates from a uniform reservoir, not exact whole-session percentiles or maxima." : "All observed frames retained.")}\n- {r.Incidents.Count} selected distinct incidents; ±2s context and independently retained stacks in incidents.json and GPT-REPORT.md.\n");
+        {
+            b.AppendLine($"## Continuous recording\n\n- Session: {session.StartedUtc:O} to {session.StoppedUtc:O}, {session.RecordedSeconds:F1}s; status {session.Status}, stop reason {session.StopReason}\n- Stack interval coverage: {session.StackCoverageSeconds:F1}s ({session.StackCoveragePercent:F1}%), with gaps explicitly unobserved\n- Stack coverage gap: {session.UncoveredSeconds:F1}s uncovered, {session.UncoveredDuringHeapDumpHoldsSeconds:F1}s of it inside heap-dump holds; those holds totalled {session.HeapDumpHoldSeconds:F1}s, so a hold is not by itself a gap\n- Frames observed {session.FramesObserved:N0}, retained {r.Ticks.Length:N0}, omitted {session.FramesOmitted:N0}. {(session.FramesOmitted > 0 ? "Frame distributions above are estimates from a uniform reservoir, not exact whole-session percentiles or maxima." : "All observed frames retained.")}\n- {r.Incidents.Count} selected distinct incidents; ±2s context and independently retained stacks in incidents.json and GPT-REPORT.md.\n");
+        }
+        if (r.HeapDumps.Count > 0)
+        {
+            b.AppendLine($"## Heap dumps\n\n{r.HeapDumps.Count} requested by hand during this recording. Each answers which owner retains the bytes; the raw trace is deleted as soon as its aggregate exists, so these figures cannot be recomputed from the bundle.\n");
+            b.AppendLine("| # | Status | Managed heap | Top holder | Trace of buffer | Client freeze | Stack capture |\n|---|---|---|---|---|---|---|");
+            foreach (var d in r.HeapDumps)
+                b.AppendLine($"| {d.Index} | {Cell(d.Status)} | {HeapLine(d)} | {Cell(HolderLine(d))} | {TraceLine(d)} | {FreezeLine(d)} | {PauseLine(d)} |");
+            b.AppendLine();
+            foreach (var d in r.HeapDumps.Where(d => d.Status is "failed" or "refused"))
+                b.AppendLine($"- Heap dump {d.Index} was {d.Status}: {Redactor.Text(d.Error ?? "no reason was recorded")}");
+            foreach (var d in r.HeapDumps.Where(d => d.Status is "completed" && !d.Complete))
+                b.AppendLine($"- Heap dump {d.Index} is incomplete, so its totals are lower bounds: {HeapDumpReport.Incompleteness(d)}.");
+            var compared = r.HeapDumps.Where(d => d.DeltaSincePrevious is not null).ToList();
+            if (compared.Count > 0)
+            {
+                b.AppendLine("\n### Change since the previous dump\n");
+                b.AppendLine("A single dump says what is held at one moment; two say what changed, which is the question several dumps in one recording invite. Retained bytes are a partition of the heap, so the totals subtract directly.\n");
+                b.AppendLine("| Dumps | Interval | Managed heap | Objects | Largest owner changes |\n|---|---|---|---|---|");
+                foreach (var d in compared)
+                {
+                    var delta = d.DeltaSincePrevious!;
+                    string growth = string.Join(", ", delta.Holders.Take(3).Select(e => $"{e.Name} {Signed(e.Bytes - e.PreviousBytes)}"));
+                    b.AppendLine($"| {delta.PreviousIndex} → {d.Index} | {Interval(delta.SecondsBetween)} | {Signed(delta.TotalBytes)}{(delta.LowerBound ? " (lower bound)" : "")} | {Signed(delta.NodeCount)} objects | {Cell(growth.Length > 0 ? growth : "no per-owner change")} |");
+                }
+                b.AppendLine();
+            }
+        }
         b.AppendLine("## Findings (heuristics, not established causes)\n");
         foreach (var f in r.Findings) b.AppendLine($"### {f.Title} [{f.Severity}]\n{f.Evidence}\n\nNext: {f.NextStep}\n");
         b.AppendLine("## Client mods\n\n| ID | Version | Side | Assemblies |\n|---|---|---|---|");
@@ -83,6 +150,35 @@ public static class Analysis
         return b.ToString();
     }
     private static string Cell(string value) => (value.Length > 1000 ? value[..1000] + " [truncated]" : value).Replace("|", "\\|").Replace("\r", " ").Replace("\n", " ");
+
+    private static string HeapLine(HeapDump d) => d.Status is "completed"
+        ? $"{d.TotalBytes / 1048576.0:N0} MiB in {d.NodeCount:N0} objects{(d.Complete ? "" : " (incomplete)")}"
+        : "no analysis";
+    private static string HolderLine(HeapDump d) => d.Status is "completed" && d.Holders.Count > 0
+        ? $"{d.Holders[0].Module} at {d.Holders[0].Bytes / 1048576.0:N0} MiB ({d.Holders[0].Percent:F1}% of the heap)"
+        : "—";
+    // Trace against the cap it had to fit in: neither number alone tells a reader whether the walk
+    // was cut short, which is the one thing this column exists for.
+    private static string TraceLine(HeapDump d) => d.TraceBytes <= 0 || d.BufferMegabytes <= 0
+        ? "—"
+        : $"{d.TraceBytes / 1048576.0:N0} MiB of {d.BufferMegabytes} MiB ({100.0 * d.TraceBytes / (d.BufferMegabytes * 1048576.0):F0}%)";
+    private static string PauseLine(HeapDump d) => d.Status is not "completed"
+        ? "—"
+        : d.PausedStackCapture ? $"held back {d.PauseMilliseconds / 1000:F1} s" : "no hold";
+    // The hitch, not the hold: the walk stops the client once, and the frame journal is where that
+    // is measured. "not measured" is a different answer from "nothing happened", and a dump taken
+    // in a recording that kept no frames gets the first one.
+    private static string FreezeLine(HeapDump d) => d.Status is not "completed"
+        ? "—"
+        : d.FreezeStartUtc is null ? "not measured" : $"{d.FreezeMilliseconds / 1000:F2} s";
+    private static string Signed(long value) => (value >= 0 ? "+" : "−") + Size(Math.Abs(value));
+    private static string Signed(int value) => (value >= 0 ? "+" : "−") + Math.Abs((long)value).ToString("N0", CultureInfo.InvariantCulture);
+    private static string Size(long value) => value >= 1L << 30
+        ? $"{value / (double)(1L << 30):F2} GiB"
+        : value >= 1 << 20 ? $"{value / 1048576.0:F1} MiB"
+        : value >= 1024 ? $"{value / 1024.0:F1} KiB"
+        : $"{value} B";
+    private static string Interval(double seconds) => seconds >= 90 ? $"{seconds / 60:F1} min" : $"{seconds:F0} s";
 
     public const string LlmInstructions = """
         # Analyze this Vintage Story client performance capture

@@ -18,6 +18,12 @@ public sealed class SessionRequest
     public int MaxReportFrames { get; set; } = 500000;
     public int KeepExports { get; set; } = 20;
     public bool OpenFolderWhenFinished { get; set; }
+    // Heap dump settings travel with the recording so the isolated worker honours the player's
+    // configuration and never inherits a session budget it was not given.
+    public int HeapDumpTimeoutSeconds { get; set; } = 60;
+    public int HeapDumpBufferMegabytes { get; set; } = 4096;
+    public int HeapDumpMaxNodes { get; set; } = 40_000_000;
+    public bool HeapDumpSampledAllocations { get; set; } = true;
     public Dictionary<string, string[]> ModMap { get; set; } = [];
 }
 
@@ -39,12 +45,21 @@ public sealed class SessionInfo
     public double RecordedSeconds { get; set; }
     public double StackCoverageSeconds { get; set; }
     public double StackCoveragePercent { get; set; }
+    // The coverage gap split by cause, filled by HeapDumpImpact at assembly: seconds without a stack
+    // interval, how much of that falls inside the intervals heap dumps held new stack capture back,
+    // and how long those holds were in total. The three are different numbers on purpose - a hold is
+    // not a gap when a segment that was already attached kept recording through it.
+    public double UncoveredSeconds { get; set; }
+    public double UncoveredDuringHeapDumpHoldsSeconds { get; set; }
+    public double HeapDumpHoldSeconds { get; set; }
     public long FramesObserved { get; set; }
     public long FramesOmitted { get; set; }
     public long DroppedBatches { get; set; }
     public int IncompleteJournalLines { get; set; }
     public bool Recovered { get; set; }
     public List<ProfileSegment> Segments { get; set; } = [];
+    // Status of every .ember heapdump request in this recording, in request order.
+    public List<HeapDumpStatus> HeapDumps { get; set; } = [];
     public List<string> Notes { get; set; } = [];
 }
 
@@ -72,6 +87,10 @@ public sealed class PerformanceIncident
     public long ContextEndUnixMs { get; set; }
     public double PeakFrameMs { get; set; }
     public int SlowFrames { get; set; }
+    // The dump whose walk this incident contains, when one does. A dump's hitch is measured from the
+    // same frame journal the incidents come from, so unless the two are joined a reader looking for a
+    // cause finds a large unexplained stall where the truth is "you asked for a heap dump".
+    public int? HeapDumpIndex { get; set; }
     public string Confidence { get; set; } = "low";
     public double StackCoveragePercent { get; set; }
     public MetricPoint[] Windows { get; set; } = [];

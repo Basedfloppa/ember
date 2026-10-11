@@ -141,6 +141,8 @@ public sealed class EmberSystem : ModSystem
         command.BeginSubCommand("health").WithDescription("Client FPS, CPU, memory and recording status").HandleWith(_ => Health()).EndSubCommand();
         command.BeginSubCommand("export").WithDescription("Save a recent monitoring snapshot without stopping an active session")
             .HandleWith(_ => StartExport()).EndSubCommand();
+        command.BeginSubCommand("heapdump").WithDescription("Capture a heap dump now: which owners retain memory (the game freezes briefly)")
+            .WithArgs(p.OptionalAll("description")).HandleWith(args => RequestHeapDump(args[0] as string ?? "")).EndSubCommand();
         command.BeginSubCommand("mark").WithDescription("Optional note about what happened")
             .WithArgs(p.All("description")).HandleWith(args => { collector?.Mark("user", (string)args[0]); return TextCommandResult.Success("Timeline marker saved."); }).EndSubCommand();
         command.BeginSubCommand("recover").WithDescription("Retry unfinished recordings after a crash or export failure")
@@ -153,8 +155,15 @@ public sealed class EmberSystem : ModSystem
                 return TextCommandResult.Success("Reports: " + output);
             }).EndSubCommand();
     }
-    private const string Help = "Ember — record once, play normally\n.ember start — start a full session\n.ember stop — finish and save one report\nLeaving the world/server also stops and saves automatically.\n.ember profile [seconds] — same recording, with an optional automatic timer\n.ember status / .ember health — recording status and current performance\n.ember mark <description> — optional note\n.ember folder — open reports; give GPT the included GPT-REPORT.md\n.ember export — recent monitoring snapshot\n.ember cancel — discard this recording\n.ember recover — retry an unfinished export\nNo server component or server permissions needed.";
+    private const string Help = "Ember — record once, play normally\n.ember start — start a full session\n.ember stop — finish and save one report\nLeaving the world/server also stops and saves automatically.\n.ember profile [seconds] — same recording, with an optional automatic timer\n.ember status / .ember health — recording status and current performance\n.ember heapdump [note] — capture one heap dump during a recording: which owners retain memory. Manual only, and the game freezes briefly\n.ember mark <description> — optional note\n.ember folder — open reports; give GPT the included GPT-REPORT.md\n.ember export — recent monitoring snapshot\n.ember cancel — discard this recording\n.ember recover — retry an unfinished export\nNo server component or server permissions needed.";
 
+    private TextCommandResult RequestHeapDump(string reason)
+    {
+        if (!config.EnableHeapDump) return TextCommandResult.Error("Heap dumps are disabled in the Ember configuration (EnableHeapDump).");
+        if (session is null) return TextCommandResult.Error("No recording is active, so there is nothing to attach a heap dump to. Use .ember start first.");
+        if (!session.RequestHeapDump(reason, out string message)) return TextCommandResult.Error(message);
+        return TextCommandResult.Success(message);
+    }
     private string Status() => session is null ? "Not recording. Use .ember start, play, then .ember stop or leave the world."
         : $"Session {session.Request.Id[..8]}: {session.State} · {session.Elapsed:hh\\:mm\\:ss}\nMonitoring history is saved for the session automatically. Exports: {output}";
     private TextCommandResult Health()

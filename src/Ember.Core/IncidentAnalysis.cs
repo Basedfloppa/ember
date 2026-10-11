@@ -112,6 +112,22 @@ public static class IncidentAnalysis
             var before = i.Windows.Where(w => w.UnixMs <= i.StartUnixMs).ToArray();
             var after = i.Windows.Where(w => w.UnixMs - w.WindowSeconds * 1000 >= i.EndUnixMs).ToArray();
             i.Evidence.Add($"incidents[{i.Id}]: Unix ms {i.StartUnixMs}–{i.EndUnixMs}; peak completed-frame interval={i.PeakFrameMs:F2}ms, slowFrames={i.SlowFrames}. Context ±2s is clipped at known session bounds.");
+            // A dump that stopped the client is charged to the dump rather than left looking like a
+            // game or mod hitch: the frame journal is where its cost is measured, and this list is
+            // where a reader looks for a cause. The match is the measured freeze and not the hold,
+            // because a hold can contain the game's own collections - this client had two, at +35 s
+            // and +48 s - and they must not be attributed to a dump that merely happened to run.
+            var dump = report.HeapDumps.FirstOrDefault(d => d.FreezeStartUtc is { } at &&
+                at.ToUnixTimeMilliseconds() >= i.StartUnixMs - 50 && at.ToUnixTimeMilliseconds() <= i.EndUnixMs + 50);
+            if (dump is not null)
+            {
+                i.HeapDumpIndex = dump.Index;
+                bool peak = Math.Abs(i.PeakFrameMs - dump.FreezeMilliseconds) <= 1;
+                i.Evidence.Add($"heapDumps[{dump.Index}]: this incident {(peak ? "is" : "contains")} the heap walk the capture requested, which stopped the client for {dump.FreezeMilliseconds:F0} ms starting {dump.FreezeStartUtc:HH:mm:ss.fff}, with {dump.FreezeGcPauseMilliseconds:F0} ms of runtime GC pause recorded in the same windows. The runtime performs a walk during a blocking collection, and the {dump.PauseMilliseconds / 1000:F1} s hold on new stack capture around it is not a second cost.");
+                i.Hypotheses.Insert(0, new("info", $"Heap dump {dump.Index} walk suspension",
+                    $"The capture requested heap dump {dump.Index} and the walk stopped the client for {dump.FreezeMilliseconds:F0} ms; {dump.FreezeGcPauseMilliseconds:F0} ms of timeline GC pause falls in the same windows. This is the dump's own cost, not a mod or game finding.",
+                    "Read heapDumps[] for what that dump measured; if the hitch matters more than the snapshot, take dumps in a quiet moment."));
+            }
             if (i.Title.Contains("aggregate")) i.CounterEvidence.Add("Incident timing is an aggregate runtime window because matching raw frame records were unavailable; exact frame timestamp and sub-window ordering are unknown.");
             i.Evidence.Add($"timeline windows before/during/after={before.Length}/{during.Length}/{after.Length}; windows overlapping a boundary cannot resolve sub-window ordering. Normal comparison uses {normal.Length} non-incident windows: median cpuOneCorePercent={normalCpu:F1}, allocationBytesPerSecond={normalAllocation:F0}.");
             foreach (var phase in new[] { (Name: "before", Windows: before), (Name: "during", Windows: during), (Name: "after", Windows: after) })

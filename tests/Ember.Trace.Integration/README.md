@@ -43,6 +43,8 @@ Generated test output is never written into this source directory. Each invocati
 - **limit:** request 30 seconds with a 16-MiB raw trace budget; require `sizeLimitReached` and verify the hard byte bound.
 - **invalid-pid:** pass PID **0**, which is deterministically invalid; require exit **1**, a PID diagnostic on stderr, no protocol success line, no profile and no trace artifacts. This tests argument failure without attaching to an unrelated process.
 
+Heap dumps are a separate worker mode (`--heapdump-private`) and are covered by the session tier, which requests dumps against a real target process next to a live recording, including the stack-capture pause that keeps the walk coherent; this one-shot harness does not exercise them.
+
 Successful profiles must contain full method signatures, normalized module ownership with **both** mapped mod IDs, root-first stacks, capture-relative timestamps, managed and external sample classifications, sampled allocation bytes, exception types without exception messages, and contention durations. The runner independently recomputes every hotspot's inclusive, self and managed-self counts, including repeated recursive frames. It also checks frame references and the 200,000-sample limit.
 
 ## Process lifetime and time bounds

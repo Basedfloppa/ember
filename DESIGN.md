@@ -306,12 +306,13 @@ Investigation hotspots page in groups of (12); generic report tables retain (60)
 ### Do:
 - **Do** preserve graphite surfaces, amber contextual selection and labeled diagnostic colors.
 - **Do** keep units, sampled-observation scope, uncertainty and evidence access beside the data.
+- **Do** show a heap dump's capture window, completeness and holder attribution next to its numbers, including the bytes no owner could be attributed to.
 - **Do** retain complete signatures, explicit inspection links and keyboard focus through selection and pagination.
 - **Do** preserve flame → method/evidence → results when the workbench collapses, with local chart/table overflow.
 - **Do** keep rendering local and self-contained with installed fonts, CSS and SVG.
 
 ### Don't:
-- **Don't** turn module colors, sampled hotspots or ownership hints into unsupported causal or severity claims.
+- **Don't** turn module colors, sampled hotspots, ownership hints or retained-memory figures into unsupported causal or severity claims.
 - **Don't** reuse superseded root colors, the old vertical report navigation or discarded prototype-picker chrome.
 - **Don't** add decorative gradients, entrance choreography or nested card shells to the flat investigation workspace.
 - **Don't** propagate legacy eyebrow styling, system-face display treatment or text-glyph action icons as new component conventions.

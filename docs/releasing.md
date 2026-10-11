@@ -33,7 +33,7 @@ Follow the current [ModDB terms](https://mods.vintagestory.at/terms), [mod metad
 - Credit [spark](https://spark.lucko.me/) and [Lithos Probe](https://mods.vintagestory.at/probe) as the principal motivations.
 - State that the implementation was written entirely with AI assistance using **OpenAI GPT-6 Astra**. Explain that AI is not required at runtime and recordings are not automatically uploaded.
 - Explain the external .NET 10 worker and that finalization can continue after game exit. State current Windows validation and unvalidated Linux/macOS workflows.
-- Do not advertise zero overhead, exact CPU attribution, guaranteed anonymity or automatic identification of a culpable mod.
+- Do not advertise zero overhead, exact CPU attribution, guaranteed anonymity or automatic identification of a culpable mod. Heap dumps are manual only and report which owner retains memory, never which mod caused growth.
 
 ## Repository settings
 

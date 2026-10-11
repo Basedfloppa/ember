@@ -33,6 +33,13 @@ public sealed class EmberConfig
     public int SessionSegmentSamples { get; set; } = 50000;
     public bool EnableGpuTiming { get; set; } = true;
     public bool OpenFolderWhenFinished { get; set; } = true;
+    // Heap dumps are never automatic: this only allows or refuses an explicit .ember heapdump.
+    public bool EnableHeapDump { get; set; } = true;
+    public int HeapDumpTimeoutSeconds { get; set; } = 60;
+    public int HeapDumpBufferMegabytes { get; set; } = 4096;
+    public int HeapDumpMaxNodes { get; set; } = 40_000_000;
+    public bool HeapDumpSampledAllocations { get; set; } = true;
+    // Heap dumps are never automatic: this only allows or refuses an explicit .ember heapdump.
     public void Normalize()
     {
         HistorySeconds = Math.Clamp(HistorySeconds, 30, 3600);
@@ -48,6 +55,18 @@ public sealed class EmberConfig
         SessionMaxSeconds = Math.Clamp(SessionMaxSeconds, 60, 28800);
         SessionDiskBudgetMegabytes = Math.Clamp(SessionDiskBudgetMegabytes, 128, 8192);
         SessionSegmentSamples = Math.Clamp(SessionSegmentSamples, 10000, 200000);
+        HeapDumpTimeoutSeconds = Math.Clamp(HeapDumpTimeoutSeconds, 10, 300);
+        // The circular buffer has to absorb the whole dump burst, because the runtime outruns the
+        // trace consumer at the start. Too small a buffer overwrites the oldest events of the walk,
+        // which costs the roots and makes most of the heap read as unreachable; completeness is
+        // verified after every dump, but the buffer is the first line of defence. The walk needs
+        // roughly as many bytes as the heap it walks (measured: 1.05 GiB of trace for a 1.43 GiB
+        // client heap, 0.86 GiB for a 0.74 GiB synthetic one), so the default leaves room for a
+        // modded client, and the ceiling bounds how much memory a dump may add to the game. The
+        // ceiling costs nothing until the walk fills it: the runtime allocates ring buffers as the
+        // burst arrives (measured: identical target RSS at 1024, 2048 and 4096 MiB caps).
+        HeapDumpBufferMegabytes = Math.Clamp(HeapDumpBufferMegabytes, 64, 8192);
+        HeapDumpMaxNodes = Math.Clamp(HeapDumpMaxNodes, 1_000_000, 100_000_000);
     }
 }
 
@@ -85,8 +104,8 @@ public sealed record MetricDefinition(string Unit, string Source, string Meaning
 
 public sealed class DiagnosticReport
 {
-    public string SchemaVersion { get; set; } = "1.1.0";
-    public string Producer { get; set; } = "Ember Diagnostics 1.1.0";
+    public string SchemaVersion { get; set; } = "1.2.0";
+    public string Producer { get; set; } = "Ember Diagnostics 1.2.0";
     public string Id { get; set; } = Guid.NewGuid().ToString("N");
     public DateTimeOffset CreatedUtc { get; set; } = DateTimeOffset.UtcNow;
     public string Side { get; set; } = "client";
@@ -107,6 +126,8 @@ public sealed class DiagnosticReport
     public DiagnosticEvent[] Events { get; set; } = [];
     public StackProfile? Profile { get; set; }
     public SessionInfo? Session { get; set; }
+    // One entry per .ember heapdump request, in request order. Empty unless the player asked.
+    public List<HeapDump> HeapDumps { get; set; } = [];
     public List<PerformanceIncident> Incidents { get; set; } = [];
     public List<ContextSnapshot> ContextHistory { get; set; } = [];
     public List<Finding> Findings { get; set; } = [];

@@ -33,7 +33,7 @@ if (metadata.version !== props.match(/<Version>([^<]+)<\/Version>/)?.[1]) errors
 if (!/^[a-z0-9]+$/.test(metadata.modid)) errors.push('Invalid mod identifier.');
 if (metadata.side !== 'Client' || metadata.requiredOnServer !== false) errors.push('Unexpected client/server metadata.');
 for (const file of files) {
-  if (/(?:^|\/)(?:bin|obj|test-runs|artifacts|\.research|\.tools)\//.test(file) || /\.(?:dll|exe|nettrace|etl|etlx|dmp|zip)$/i.test(file)) {
+  if (/(?:^|\/)(?:bin|obj|test-runs|artifacts|\.research|\.tools)\//.test(file) || /\.(?:dll|exe|nettrace|etl|etlx|dmp|gcdump|hprof|zip)$/i.test(file)) {
     errors.push(`Generated, proprietary or diagnostic binary tracked: ${file}`);
   }
 }
