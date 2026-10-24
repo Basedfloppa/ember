@@ -26,6 +26,11 @@ public static class LlmContext
             hotspots = profile.Hotspots.OrderByDescending(h => h.ManagedSelfSamples).Take(100)
                 .Concat(profile.Hotspots.OrderByDescending(h => h.InclusiveSamples).Take(50)).DistinctBy(h => h.Frame)
                 .Select(h => new { frame = profile.Frames[h.Frame], h.SelfSamples, h.InclusiveSamples, h.ManagedSelfSamples }),
+            modSamples = profile.ModSamples.Take(40),
+            unattributedSelfSamples = profile.UnattributedSelfSamples,
+            framesWithoutModule = profile.FramesWithoutModule,
+            framesRecoveredFromRawTrace = profile.FramesRecoveredFromRawTrace,
+            framesMatchedByTypeName = profile.FramesMatchedByTypeName,
             representativeManagedStacks = profile.Samples.Where(s => s.Managed)
                 .GroupBy(s => s.Stack, StackComparer.Instance)
                 .OrderByDescending(g => g.Count()).Take(20)

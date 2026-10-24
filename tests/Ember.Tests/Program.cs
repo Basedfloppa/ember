@@ -42,6 +42,9 @@ internal static class Program
             Sync("Speedscope empty profile remains valid JSON", EmptySpeedscope),
             Sync("findings do not blame merely installed or sampled mods", FindingAttribution),
             Sync("findings report measured pressure and data-quality limits", FindingEvidence),
+            Sync("mod ownership: module first, raw recovery second, type namespace last", ModOwnershipResolution),
+            Sync("mod sample tally counts self, inclusive and unowned leaves honestly", ModSampleTally),
+            Sync("mod attribution quality reaches summary, findings and JSON", ModAttributionReporting),
             Sync("compact LLM context preserves extremes without raw sample duplication", CompactContext),
             Sync("export ZIP manifest hashes, hostile HTML and round-trip JSON", ExportBundle),
             Sync("export without profile and export retention", ExportRetention),
@@ -483,6 +486,146 @@ internal static class Program
         string summary = Analysis.Summary(installed);
         True(summary.Contains("not exact CPU-time percentages", StringComparison.Ordinal), "Summary must distinguish stack samples from CPU time.");
         True(summary.Contains("Public-server CPU", StringComparison.Ordinal), "Remote server scope limitation missing.");
+    }
+
+    private static void ModOwnershipResolution()
+    {
+        var map = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["VintageHorizons"] = ["vintagehorizons"],
+            ["VintagestoryLib"] = [],
+            ["Shared"] = ["beta", "alpha"]
+        };
+        // A module the trace named is the answer, and a known module that belongs to no mod is an
+        // answer too: the method's namespace must not override it.
+        var named = ProfileOwnership.Resolve("Vintagestory.GameContent.BlockEntityX.Tick(float)", "VintagestoryLib", "/mods/VintageHorizons.dll", map);
+        Equal("VintagestoryLib", named.Module);
+        Equal(0, named.Mods.Length);
+        True(named.Identified, "A named module must count as identified.");
+        True(!named.Recovered, "A named module must not be reported as recovered.");
+        Equal(null, named.Match);
+        var ownedButGuessed = ProfileOwnership.Resolve("VintageHorizons.LodWorker.Tick()", "VintagestoryLib", null, map);
+        Equal(0, ownedButGuessed.Mods.Length);
+        Equal(null, ownedButGuessed.Match);
+        // TraceEvent's placeholder for managed code is not a module.
+        True(!ProfileOwnership.IsIdentified("ManagedModule"), "The synthetic managed module must not count as identified.");
+        True(!ProfileOwnership.IsIdentified(""), "An empty module must not count as identified.");
+        True(!ProfileOwnership.IsIdentified(null), "A null module must not count as identified.");
+        True(!ProfileOwnership.IsIdentified("unknown"), "The unknown placeholder must not count as identified.");
+        True(ProfileOwnership.IsIdentified("VintagestoryLib"), "A real module name must count as identified.");
+        // The raw trace names the module the conversion lost.
+        var recovered = ProfileOwnership.Resolve("VintageHorizons.LodWorker.CaptureLoop()", "ManagedModule",
+            "/home/user/.config/VintagestoryData/Mods/vintagehorizons-0.3.1/VintageHorizons.dll", map);
+        Equal("VintageHorizons", recovered.Module);
+        Sequence(new[] { "vintagehorizons" }, recovered.Mods);
+        True(recovered.Recovered, "A raw-trace module must be reported as recovered.");
+        Equal(null, recovered.Match);
+        // Nothing names it: the root namespace, and only against an assembly a mod declares.
+        var typed = ProfileOwnership.Resolve("VintageHorizons.LodWorker.MeshLoop()", "ManagedModule", null, map);
+        Sequence(new[] { "vintagehorizons" }, typed.Mods);
+        Equal(ProfileOwnership.TypeNamespaceMatch, typed.Match);
+        True(!typed.Identified, "A type-namespace match is not a module statement.");
+        Equal("ManagedModule", typed.Module);
+        var none = ProfileOwnership.Resolve("System.Threading.Thread.Sleep(int32)", "ManagedModule", null, map);
+        Equal(0, none.Mods.Length);
+        Equal(null, none.Match);
+        // Owners of a shared assembly come back in a stable order, whatever the map's order was.
+        var shared = ProfileOwnership.Resolve("Shared.Thing.Run()", "Shared", null, map);
+        Sequence(new[] { "alpha", "beta" }, shared.Mods);
+        Equal("VintageHorizons", ProfileOwnership.TypeRoot("VintageHorizons.LodWorker.CaptureLoop()"));
+        Equal("dynamicClass", ProfileOwnership.TypeRoot("dynamicClass.lambda_method"));
+        Equal("VintageHorizons", ProfileOwnership.ModuleKey(@"C:\Mods\vintagehorizons\VintageHorizons.dll"));
+        Equal("VintageHorizons", ProfileOwnership.ModuleKey("/mods/VintageHorizons.exe"));
+        Equal("", ProfileOwnership.ModuleKey(null));
+    }
+
+    private static void ModSampleTally()
+    {
+        var frames = new List<ProfileFrame>
+        {
+            new("A.Run()", "ModA", ["alpha"]),
+            new("B.Run()", "Shared", ["beta", "gamma"]),
+            new("System.Wait()", "System.Private.CoreLib", []),
+            new("D.Run()", "ManagedModule", ["delta"], ProfileOwnership.TypeNamespaceMatch)
+        };
+        var samples = new List<ProfileSample>
+        {
+            new(0, 1, true, [0, 1]),
+            new(1, 1, true, [1]),
+            new(2, 1, false, [2]),
+            new(3, 1, true, [3]),
+            new(4, 1, true, [0])
+        };
+        var (mods, unattributed) = ProfileOwnership.Tally(samples, frames);
+        Equal(1, unattributed);
+        Equal(4, mods.Count);
+        var alpha = mods.Single(m => m.Mod == "alpha");
+        Equal(1, alpha.SelfSamples);
+        Equal(2, alpha.InclusiveSamples);
+        Equal(1, alpha.ManagedSelfSamples);
+        var beta = mods.Single(m => m.Mod == "beta");
+        Equal(2, beta.SelfSamples);
+        Equal(2, beta.InclusiveSamples);
+        Equal(2, beta.ManagedSelfSamples);
+        Equal(1, mods.Single(m => m.Mod == "delta").SelfSamples);
+        Equal(1, mods.Single(m => m.Mod == "delta").ManagedSelfSamples);
+        // A frame index outside the frame table is not invented as an owner.
+        var (empty, allUnattributed) = ProfileOwnership.Tally([new ProfileSample(0, 1, true, [99])], frames);
+        Equal(0, empty.Count);
+        Equal(1, allUnattributed);
+        string note = ProfileOwnership.OwnershipNote(10, 4, 3, 1);
+        True(note.Contains("recovered from the raw trace", StringComparison.Ordinal), "Ownership note must name the recovery source.");
+        True(note.Contains(ProfileOwnership.TypeNamespaceMatch, StringComparison.Ordinal), "Ownership note must name the heuristic marker.");
+    }
+
+    private static void ModAttributionReporting()
+    {
+        var report = Fixture();
+        var profile = new StackProfile
+        {
+            DurationSeconds = 10,
+            Frames =
+            [
+                new("VintageHorizons.LodWorker.CaptureLoop()", "ManagedModule", ["vintagehorizons"], ProfileOwnership.TypeNamespaceMatch),
+                new("Vintagestory.Client.NoObf.ClientMain.Run()", "VintagestoryLib", []),
+                new("Work.Burn(int32)", "Ember.Trace.Session.Tests", [])
+            ],
+            Samples = [new(0, 1, true, [2, 0]), new(1, 1, true, [2]), new(2, 1, false, [1])],
+            FramesWithoutModule = 1, FramesMatchedByTypeName = 1
+        };
+        profile.Hotspots = ProfileMerge.Hotspots(profile.Samples);
+        (profile.ModSamples, profile.UnattributedSelfSamples) = ProfileOwnership.Tally(profile.Samples, profile.Frames);
+        report.Profile = profile;
+        string summary = Analysis.Summary(report);
+        True(summary.Contains("### Samples by owning mod", StringComparison.Ordinal), "Summary must answer whose code the samples are.");
+        True(summary.Contains("vintagehorizons", StringComparison.Ordinal), "Summary must name the owning mod.");
+        True(summary.Contains("(mod by type name)", StringComparison.Ordinal), "A namespace-derived owner must be marked in the hotspot table.");
+        True(summary.Contains("no known mod on the leaf frame", StringComparison.Ordinal), "The unowned denominator must be stated.");
+        string[] titles = Analysis.Findings(report).Select(f => f.Title).ToArray();
+        True(titles.Contains("Mod attribution is incomplete"), "Frames without a module must be reported, not silently unowned.");
+        using (var doc = JsonDocument.Parse(Json.Write(report)))
+        {
+            var p = doc.RootElement.GetProperty("profile");
+            Equal("type-namespace", p.GetProperty("frames")[0].GetProperty("match").GetString());
+            Equal(1, p.GetProperty("modSamples").GetArrayLength());
+            Equal(2, p.GetProperty("unattributedSelfSamples").GetInt32());
+            Equal(1, p.GetProperty("framesMatchedByTypeName").GetInt32());
+        }
+        // A frame with a real module carries no marker at all: the field exists only for fallbacks.
+        using (var doc = JsonDocument.Parse(Json.Write(report)))
+        {
+            var second = doc.RootElement.GetProperty("profile").GetProperty("frames")[1];
+            True(!second.TryGetProperty("match", out _), "A module-derived owner must not claim a heuristic match.");
+        }
+        // Once every frame has a module the data-quality finding is withdrawn rather than repeated.
+        profile.FramesWithoutModule = 0;
+        profile.FramesMatchedByTypeName = 0;
+        True(!Analysis.Findings(report).Any(f => f.Title == "Mod attribution is incomplete"),
+            "A fully resolved profile must not be reported as incomplete.");
+        using var context = JsonDocument.Parse(Json.Write(LlmContext.Create(report)));
+        Equal(1, context.RootElement.GetProperty("profile").GetProperty("modSamples").GetArrayLength());
+        True(context.RootElement.GetProperty("profile").TryGetProperty("framesWithoutModule", out _),
+            "Compact context must carry the ownership quality counters.");
     }
 
     private static void FindingEvidence()

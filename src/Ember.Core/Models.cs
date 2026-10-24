@@ -135,9 +135,12 @@ public sealed class DiagnosticReport
     public Dictionary<string, MetricDefinition> Metrics { get; set; } = MetricCatalog.Create();
 }
 
-public sealed record ProfileFrame(string Name, string Module, string[] Mods);
+// Match is set only when the mod came from something other than a module the trace named; see
+// ProfileOwnership. Null therefore means "the runtime said which module this is".
+public sealed record ProfileFrame(string Name, string Module, string[] Mods, string? Match = null);
 public sealed record ProfileSample(double RelativeMs, int ThreadId, bool Managed, int[] Stack);
 public sealed record Hotspot(int Frame, int SelfSamples, int InclusiveSamples, int ManagedSelfSamples);
+public sealed record ModSample(string Mod, int SelfSamples, int InclusiveSamples, int ManagedSelfSamples);
 public sealed record AllocationType(string Type, long SampledBytes, int Events);
 public sealed class StackProfile
 {
@@ -156,6 +159,15 @@ public sealed class StackProfile
     public List<ProfileFrame> Frames { get; set; } = [];
     public List<ProfileSample> Samples { get; set; } = [];
     public List<Hotspot> Hotspots { get; set; } = [];
+    public List<ModSample> ModSamples { get; set; } = [];
+    // Samples whose leaf frame belongs to no known mod. Kept as the denominator of every mod share:
+    // an unowned leaf is framework, vanilla or unidentified code, not a mod, and not "other".
+    public int UnattributedSelfSamples { get; set; }
+    // How frame ownership was learned, so a report can state its own quality instead of implying that
+    // an empty mod list means "no mod was executing". Counts are distinct frames, not samples.
+    public int FramesWithoutModule { get; set; }
+    public int FramesRecoveredFromRawTrace { get; set; }
+    public int FramesMatchedByTypeName { get; set; }
     public List<AllocationType> Allocations { get; set; } = [];
     public Dictionary<string, int> ExceptionTypes { get; set; } = [];
     public int ContentionEvents { get; set; }

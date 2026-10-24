@@ -51,6 +51,9 @@ internal static class ProfileParser
         if (conversionLimited) profile.Notes.Add("TraceLog's event conversion limit was reached; aggregates describe only retained events.");
         var frames = new Dictionary<(string Module, string Name), int>();
         var counts = new List<int[]>();
+        // The code address of each frame, kept only until ownership is resolved after the pass: the
+        // address is what the raw-trace recovery matches on, and the frame record does not carry it.
+        var frameAddresses = new List<ulong>();
         var allocations = new Dictionary<string, (long Bytes, int Events)>(StringComparer.Ordinal);
         int entries = 0;
         int seenStackSamples = 0;
@@ -82,6 +85,11 @@ internal static class ProfileParser
                 var address = stack.CodeAddress;
                 string module = Options.ModuleKey(address.ModuleFilePath ?? address.ModuleName ?? "unknown");
                 if (string.IsNullOrEmpty(module)) module = "unknown";
+                // The blinding hook stands in for a runtime that never associated managed code with a
+                // module — the observed client failure — while leaving genuinely unnamed native frames
+                // as they were: the frame keeps the placeholder and the recovery below has to replace it.
+                if (info.IgnoreConvertedModuleNames && ProfileOwnership.IsIdentified(module))
+                    module = ProfileOwnership.UnidentifiedModule;
                 string name = address.FullMethodName;
                 if (string.IsNullOrEmpty(name)) name = $"{module}!0x{address.Address:x}";
                 if (!frames.TryGetValue((module, name), out int id))
@@ -89,7 +97,10 @@ internal static class ProfileParser
                     if (frames.Count >= MaxFrames) { frameLimited = true; profile.SamplesDroppedByLimit++; return; }
                     id = profile.Frames.Count;
                     frames.Add((module, name), id);
-                    profile.Frames.Add(new(name, module, map.GetValueOrDefault(module) ?? []));
+                    // Mods are left empty here and resolved once after the pass, so the trace's own
+                    // module answer and the fallbacks cannot disagree with each other frame by frame.
+                    profile.Frames.Add(new(name, module, []));
+                    frameAddresses.Add(address.Address);
                     counts.Add(new int[3]);
                 }
                 ids.Add(id);
@@ -157,6 +168,32 @@ internal static class ProfileParser
         if (frameLimited) profile.Notes.Add("The unique frame limit was reached.");
         if (typesLimited) profile.Notes.Add("Type cardinality exceeded 20,000; additional types are aggregated as [other types: limit].");
         if (unclassified > 0) profile.Notes.Add($"Omitted {unclassified} profiler samples with an unknown/error execution classification.");
+        // Ownership is decided once, after the whole pass: the trace names a module for most frames,
+        // the raw trace can name it for the ones the conversion lost, and the method's root namespace
+        // is the last resort. Doing it here keeps the three answers in one place.
+        ProfileModules? recovered = null;
+        string? recoveryNote = null;
+        bool unidentified = profile.Frames.Any(f => !ProfileOwnership.IsIdentified(f.Module));
+        if (unidentified)
+            recovered = ProfileModules.Read(Path.Combine(directory, "capture.nettrace"), out recoveryNote);
+        int withoutModule = 0, fromRawTrace = 0, byTypeName = 0;
+        for (int i = 0; i < profile.Frames.Count; i++)
+        {
+            var frame = profile.Frames[i];
+            var ownership = ProfileOwnership.Resolve(frame.Name, frame.Module, recovered?.Lookup(frameAddresses[i]), map);
+            profile.Frames[i] = frame with { Module = ownership.Module, Mods = ownership.Mods, Match = ownership.Match };
+            if (!ownership.Identified) withoutModule++;
+            if (ownership.Recovered) fromRawTrace++;
+            if (ownership.Match == ProfileOwnership.TypeNamespaceMatch) byTypeName++;
+        }
+        profile.FramesWithoutModule = withoutModule;
+        profile.FramesRecoveredFromRawTrace = fromRawTrace;
+        profile.FramesMatchedByTypeName = byTypeName;
+        profile.Notes.Add(ProfileOwnership.OwnershipNote(profile.Frames.Count, withoutModule, fromRawTrace, byTypeName));
+        if (recovered is not null) profile.Notes.Add("Frame ownership recovery: " + recoveryNote + ".");
+        else if (unidentified) profile.Notes.Add($"Frame ownership recovery was unavailable for the {withoutModule:N0} frame(s) the runtime named no module for, because {recoveryNote ?? "the raw trace produced nothing"}; those frames carry a mod only where the method's root namespace names a declared assembly.");
+        (profile.ModSamples, profile.UnattributedSelfSamples) = ProfileOwnership.Tally(profile.Samples, profile.Frames);
+        profile.Notes.Add(ProfileOwnership.TallyNote(profile.ModSamples.Count, profile.UnattributedSelfSamples, profile.Samples.Count));
         using var output = new FileStream(Path.Combine(directory, "profile.json"), FileMode.CreateNew);
         JsonSerializer.Serialize(output, profile, Json.Options);
 

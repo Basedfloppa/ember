@@ -36,6 +36,18 @@ public static class Analysis
                 result.Add(new("info", "Stack samples intentionally downsampled", $"Retained {p.Samples.Count:N0} observations; {p.SamplesDroppedByLimit:N0} omitted by bounded sampling. No EventPipe loss or byte-limit stop was reported.", "Use session coverage and per-incident samples to judge temporal evidence. Reservoir omissions reduce sample density; they do not by themselves indicate a truncated capture."));
             if (p.Samples.Count == 0)
                 result.Add(new("warning", "No resolved stack samples", $"{p.SamplesWithoutStack} events had no stack.", "Check profiler notes and .NET diagnostic support. The health timeline remains independently useful."));
+            // Mod ownership is only as good as the module the runtime named for a frame. A session whose
+            // conversion dropped the module events shows every managed frame as "ManagedModule" and
+            // silently loses the answer to "whose logic is this" — measured on a real capture, 0 of 1404
+            // frames carried a mod. Saying so is the difference between "no mod was running" and "this
+            // report cannot tell you".
+            if (p.Frames.Count > 0 && p.FramesWithoutModule > 0)
+            {
+                bool most = p.FramesWithoutModule * 2 > p.Frames.Count;
+                result.Add(new(most ? "warning" : "info", "Mod attribution is incomplete",
+                    $"{p.FramesWithoutModule:N0} of {p.Frames.Count:N0} distinct stack frames have no module in the trace; {p.FramesRecoveredFromRawTrace:N0} were recovered from the raw trace's method-load events and {p.FramesMatchedByTypeName:N0} carry a mod only from the method's root namespace.",
+                    "Read profile.frames[].match and profile.notes before treating a mod name as the runtime's answer. Mods missing here are missing evidence, not absent activity."));
+            }
         }
         else result.Add(new("info", "No stack profile attached", "This bundle contains monitoring data only.", "Use .ember profile 30 while reproducing the problem to add managed stacks, sampled allocation types and contention."));
         // A dump is requested by hand, so its outcome is a first-class result of the capture and not
@@ -139,7 +151,18 @@ public static class Analysis
             foreach (var h in p.Hotspots.OrderByDescending(h => h.ManagedSelfSamples).Take(40))
             {
                 var f = p.Frames[h.Frame];
-                b.AppendLine($"| {Cell(f.Name)} | {Cell(f.Module + " / " + string.Join(",", f.Mods))} | {h.ManagedSelfSamples} | {h.InclusiveSamples} |");
+                b.AppendLine($"| {Cell(f.Name)} | {Cell(Owner(f))} | {h.ManagedSelfSamples} | {h.InclusiveSamples} |");
+            }
+            // The hotspot list answers "which method"; this answers "whose code", which is the question
+            // a stack profile is usually opened with. Self is the executing leaf frame; inclusive
+            // overlaps across mods and is deliberately not turned into a share.
+            if (p.ModSamples.Count > 0)
+            {
+                b.AppendLine($"\n### Samples by owning mod\n\nA sample counts once for every mod anywhere in its stack (inclusive, overlapping) and for the mods of its leaf frame (self). {p.UnattributedSelfSamples:N0} of {p.Samples.Count:N0} retained observations have no known mod on the leaf frame — framework, vanilla or unidentified code. An owner is a lookup aid, not proof of cause.\n");
+                b.AppendLine("| Mod | Self samples | Inclusive samples | Managed self | Self share |\n|---|---:|---:|---:|---:|");
+                foreach (var m in p.ModSamples.Take(25))
+                    b.AppendLine($"| {Cell(m.Mod)} | {m.SelfSamples} | {m.InclusiveSamples} | {m.ManagedSelfSamples} | {(p.Samples.Count > 0 ? 100.0 * m.SelfSamples / p.Samples.Count : 0):F1}% |");
+                if (p.ModSamples.Count > 25) b.AppendLine($"\n{p.ModSamples.Count - 25} additional mod(s) omitted here; see report.json profile.modSamples.");
             }
             b.AppendLine("\n### Sampled allocation types\n");
             foreach (var a in p.Allocations.Take(20)) b.AppendLine($"- {Cell(a.Type)}: {a.SampledBytes:N0} sampled bytes ({a.Events} allocation events)");
@@ -150,6 +173,14 @@ public static class Analysis
         return b.ToString();
     }
     private static string Cell(string value) => (value.Length > 1000 ? value[..1000] + " [truncated]" : value).Replace("|", "\\|").Replace("\r", " ").Replace("\n", " ");
+
+    // A frame's module is the runtime's own statement; a mod reached only through the method's root
+    // namespace is marked, so the table cannot read as if the trace had named that assembly.
+    private static string Owner(ProfileFrame frame)
+    {
+        string owner = frame.Mods.Length > 0 ? frame.Module + " / " + string.Join(",", frame.Mods) : frame.Module;
+        return frame.Match == ProfileOwnership.TypeNamespaceMatch ? owner + " (mod by type name)" : owner;
+    }
 
     private static string HeapLine(HeapDump d) => d.Status is "completed"
         ? $"{d.TotalBytes / 1048576.0:N0} MiB in {d.NodeCount:N0} objects{(d.Complete ? "" : " (incomplete)")}"
@@ -190,6 +221,10 @@ public static class Analysis
         2. Separate measured facts, correlations and hypotheses. Cite JSON field paths, timestamps, methods and mod IDs for every diagnosis.
         3. Diagnose frame pacing, CPU activity, GC/allocation pressure, render submission, loading/meshing, network symptoms and errors separately.
         4. Stack samples measure thread activity, not exact on-CPU time. Managed/external does not mean busy/idle. Inclusive samples overlap.
+           profile.modSamples attributes retained samples to mods: self is the executing leaf frame, inclusive overlaps and must not be summed,
+           and unattributedSelfSamples is framework/vanilla/unidentified code rather than "other mods". A frame with match="type-namespace" got
+           its mod from the method's root namespace because the trace named no module; framesWithoutModule counts those frames, so a missing mod
+           is missing evidence and not proof the mod was idle.
            Framework leaf frames may be invoked by mods; inspect callers before assigning ownership. Shared assemblies have multiple owners.
            Harmony patches can alter vanilla methods without appearing as leaf mod frames. Asset-only mods can impose costs in vanilla code.
         5. Frame interval includes VSync, FPS cap, focus changes, pause and scheduling. Render-stage timings are CPU-side wall time.

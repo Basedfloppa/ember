@@ -36,14 +36,14 @@ internal sealed record Options(int Pid, int Seconds, string Output, int MaxMb, D
             values.ContainsKey("--max-samples") ? Number("--max-samples", 1, 200_000) : 200_000);
     }
 
-    internal static string ModuleKey(string path)
-    {
-        string name = path.Replace('\\', '/').Split('/')[^1];
-        return name.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) || name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
-            ? name[..^4] : name;
-    }
+    internal static string ModuleKey(string path) => Core.ProfileOwnership.ModuleKey(path);
 }
 
 internal sealed record CaptureInfo(int Pid, DateTimeOffset EndedUtc, long TraceBytes,
     bool SizeLimitReached, bool Truncated, Dictionary<string, string[]> Map, int MaxSamples = 200_000,
-    int MaxConversionEvents = 2_000_000);
+    int MaxConversionEvents = 2_000_000,
+    // Private checkpoint, like MaxConversionEvents: it blinds the converted trace's module association
+    // so the raw-trace module recovery can be exercised on a real capture instead of on a fixture that
+    // assumes the failure. A real client session reached exactly that state, with every managed frame
+    // reading "ManagedModule" and no mod attributable.
+    bool IgnoreConvertedModuleNames = false);

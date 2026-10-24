@@ -53,7 +53,7 @@ public static class ProfileMerge
         int frameLimitHits = 0;
         int Map(ProfileFrame frame)
         {
-            string key = Json.Write(new { frame.Name, frame.Module, Mods = frame.Mods.Order(StringComparer.Ordinal).ToArray() });
+            string key = Json.Write(new { frame.Name, frame.Module, Mods = frame.Mods.Order(StringComparer.Ordinal).ToArray(), frame.Match });
             if (frameIds.TryGetValue(key, out int id)) return id;
             if (result.Frames.Count >= 199999)
             {
@@ -103,6 +103,9 @@ public static class ProfileMerge
                 result.SamplesWithoutStack = Add(result.SamplesWithoutStack, p.SamplesWithoutStack);
                 result.TraceBytes += p.TraceBytes;
                 result.SizeLimitReached |= p.SizeLimitReached;
+                result.FramesWithoutModule = Add(result.FramesWithoutModule, p.FramesWithoutModule);
+                result.FramesRecoveredFromRawTrace = Add(result.FramesRecoveredFromRawTrace, p.FramesRecoveredFromRawTrace);
+                result.FramesMatchedByTypeName = Add(result.FramesMatchedByTypeName, p.FramesMatchedByTypeName);
                 result.ContentionEvents = Add(result.ContentionEvents, p.ContentionEvents);
                 result.ContentionTotalMs += p.ContentionTotalMs;
                 foreach (var a in p.Allocations)
@@ -126,6 +129,7 @@ public static class ProfileMerge
         result.Samples = result.Samples.OrderBy(s => s.RelativeMs).ToList();
         result.SamplesDroppedByLimit = (int)Math.Clamp(total - result.Samples.Count, 0, int.MaxValue);
         result.Hotspots = Hotspots(result.Samples);
+        (result.ModSamples, result.UnattributedSelfSamples) = ProfileOwnership.Tally(result.Samples, result.Frames);
         result.Allocations = allocations.Select(a => new AllocationType(a.Key, a.Value.Bytes, a.Value.Events)).OrderByDescending(a => a.SampledBytes).ToList();
         session.StackCoverageSeconds = SessionFiles.UnionMilliseconds(validIntervals) / 1000;
         session.StackCoveragePercent = session.RecordedSeconds > 0 ? 100 * session.StackCoverageSeconds / session.RecordedSeconds : 0;

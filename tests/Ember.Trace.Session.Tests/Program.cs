@@ -71,6 +71,7 @@ try
     await HeapDumpMessages();
     if (args is ["--atomic-only"]) { Console.WriteLine("PASS: atomic snapshot concurrency check"); return; }
     if (args is ["--alloc-only"]) { await HeapDumpAllocationSamples(); return; }
+    if (args is ["--mods-only"]) { await ProfileModOwnership(); return; }
     if (args is ["--heapdump-only"]) { await HeapDumpMessages(); await HeapDumpCoherentSnapshot(); await HeapDumpAllocationSamples(); await HeapDumpFailureReporting(); await HeapDumpDeadline(); await HeapDumpSoftStop(); await HeapDumpWorkflow(); return; }
     if (args is ["--dumpfail-only"]) { await HeapDumpFailureReporting(); await HeapDumpDeadline(); await HeapDumpSoftStop(); return; }
     if (args is ["--dumppark-only", ..]) { await HeapDumpParking(args.Length > 1 ? args[1] : null); return; }
@@ -81,6 +82,7 @@ try
     await RecoveryAndFailure();
     await InterruptedSupervisor();
     await RetainedRawRecovery();
+    await ProfileModOwnership();
     await StopDuringAttach();
     await MonitoringOnly();
     await HeapDumpCoherentSnapshot();
@@ -796,6 +798,67 @@ async Task DiskLimit()
     Check(await session.Exit() == 0, "disk cap automatically exports");
     var report = Report(Read<SessionResult>(Path.Combine(dir, "result.json")));
     Check(report.Session!.StopReason == "session disk budget reached" && report.Session.Segments.Count == 0, "persistent files count toward disk cap before attaching");
+}
+
+async Task ProfileModOwnership()
+{
+    using var target = await Target(objects: 2000);
+    string dir = Fixture("mod-ownership", target);
+    var request = Read<SessionRequest>(Path.Combine(dir, "request.json"));
+    request.SegmentSamples = 5000;
+    // The client sends this map from its own mod registry, and the target process really runs from
+    // this assembly, so the whole chain is exercised end to end: sampled address -> module ->
+    // assembly -> mod id -> tally.
+    request.ModMap = new() { ["Ember.Trace.Session.Tests"] = ["fixture-mod"] };
+    Write(Path.Combine(dir, "request.json"), request);
+    // Blocking the parse output keeps a genuinely failed segment's raw trace, which is the input the
+    // recovery needs; the fixture then reparses that trace privately.
+    File.WriteAllText(request.ExportDirectory, "blocks export directory");
+    using (var session = Launch("--session", dir))
+    {
+        await Until(() => session.Lines.Contains("READY"));
+        string blocked = Path.Combine(dir, "segments", "000001", "profile.json");
+        Directory.CreateDirectory(blocked);
+        await Until(() => ReadInfo(dir)?.Segments.Any(s => s.Status == "failed") == true);
+        Stop(dir, false);
+        Check(await session.Exit() == 1, "mod-ownership fixture retains its raw trace by failing the parse");
+        Directory.Delete(blocked);
+    }
+    target.Kill(true); await target.WaitForExitAsync();
+    string raw = Path.Combine(dir, "segments", "000001");
+    Check(File.Exists(Path.Combine(raw, "capture.nettrace")), "mod-ownership fixture kept the raw trace");
+
+    var named = await ParseOwnership("mod-ownership-named", raw, blind: false);
+    Check(named.Frames.Any(f => f.Mods.Contains("fixture-mod")), "a sampled frame is attributed to the mod that declares its assembly");
+    Check(named.Frames.Where(f => f.Mods.Length > 0).All(f => f.Module == "Ember.Trace.Session.Tests"),
+        "a mod id is attached only to frames of the assembly the map named");
+    Check(named.ModSamples.Any(m => m.Mod == "fixture-mod" && m.SelfSamples > 0), "the per-mod tally credits the mod with executing samples");
+    Check(named.ModSamples.All(m => m.InclusiveSamples >= m.SelfSamples), "inclusive observations are never smaller than self observations");
+    Check(named.Notes.Any(n => n.StartsWith("Frame ownership:", StringComparison.Ordinal)), "the profile states how ownership was learned");
+
+    // Blinded, the same raw trace reproduces the client session that lost every mod id (0 of 1404
+    // frames). The recovery has to name the modules again from the raw file's method-load events.
+    var blinded = await ParseOwnership("mod-ownership-blinded", raw, blind: true);
+    Check(blinded.FramesRecoveredFromRawTrace > 0, "modules the converted trace lost are recovered from the raw trace");
+    Check(blinded.Frames.Any(f => f.Mods.Contains("fixture-mod")), "recovered modules become the same mod ids");
+    Check(blinded.FramesWithoutModule < blinded.Frames.Count, "recovery identifies the managed frames instead of leaving them unowned");
+    Check(blinded.FramesWithoutModule <= named.FramesWithoutModule, "recovery leaves no more unnamed frames than the converted trace did");
+    Check(blinded.ModSamples.Any(m => m.Mod == "fixture-mod" && m.SelfSamples > 0), "the blinded profile still credits executing samples to the mod");
+    Check(blinded.Notes.Any(n => n.Contains("recovered", StringComparison.Ordinal)), "the profile says where the module names came from");
+
+    async Task<StackProfile> ParseOwnership(string name, string rawDirectory, bool blind)
+    {
+        string work = Path.Combine(temporary, name);
+        Directory.CreateDirectory(work);
+        File.Copy(Path.Combine(rawDirectory, "capture.nettrace"), Path.Combine(work, "capture.nettrace"));
+        var metadata = JsonNode.Parse(File.ReadAllText(Path.Combine(rawDirectory, "capture.json")))!;
+        metadata["ignoreConvertedModuleNames"] = blind;
+        metadata["maxSamples"] = 200000;
+        File.WriteAllText(Path.Combine(work, "capture.json"), metadata.ToJsonString(Json.Options));
+        using var parser = Launch("--parse-private", work);
+        if (await parser.Exit() != 0) throw new Exception("Mod-ownership fixture failed to parse: " + name);
+        return Read<StackProfile>(Path.Combine(work, "profile.json"));
+    }
 }
 
 async Task RetainedRawRecovery()

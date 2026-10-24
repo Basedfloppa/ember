@@ -4,6 +4,7 @@ Versions below describe local development milestones. A heading here does not me
 
 ## Unreleased
 
+- Attribute sampled CPU-profile frames to the mod that owns the module, recovering module names from the raw trace when the converted trace lost them and marking namespace-derived owners. Add `profile.modSamples` (self/inclusive/managed self per mod) to `SUMMARY.md`, `report.json`, the LLM context and the viewer, with the unowned-leaf count stated instead of silently folded into "other".
 - Prepare the public repository: installation/reviewer entry points, documentation index, architecture and testing guides, contribution and security policies, issue/PR templates, CI and curated viewer screenshots.
 - Prominently disclose that the entire implementation was written with AI assistance using OpenAI GPT-6 Astra.
 - Credit spark and Lithos Probe as the principal motivations for Ember.
